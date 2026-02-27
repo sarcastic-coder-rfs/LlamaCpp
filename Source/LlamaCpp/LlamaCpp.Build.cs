@@ -10,8 +10,7 @@ public class LlamaCpp : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
 			"CoreUObject",
-			"Engine",
-			"Projects"
+			"Engine"
 		});
 
 		string ThirdPartyPath = Path.Combine(ModuleDirectory, "..", "..", "ThirdParty", "llama");
@@ -68,6 +67,8 @@ public class LlamaCpp : ModuleRules
 				PublicAdditionalLibraries.Add(Path.Combine(LibPath, Lib));
 			}
 
+			PublicRuntimeLibraryPaths.Add(LibPath);
+
 			foreach (string DLL in DLLs)
 			{
 				PublicDelayLoadDLLs.Add(DLL);
@@ -88,6 +89,8 @@ public class LlamaCpp : ModuleRules
 				"libggml.dylib",
 				"libllama.dylib"
 			};
+
+			PublicRuntimeLibraryPaths.Add(LibPath);
 
 			foreach (string DyLib in DyLibs)
 			{
