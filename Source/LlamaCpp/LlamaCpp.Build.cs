@@ -70,7 +70,11 @@ public class LlamaCpp : ModuleRules
 			foreach (string DLL in DLLs)
 			{
 				PublicDelayLoadDLLs.Add(DLL);
-				RuntimeDependencies.Add(Path.Combine(LibPath, DLL));
+				string SrcPath = Path.Combine(LibPath, DLL);
+				RuntimeDependencies.Add(
+					"$(BinaryOutputDir)/" + DLL,
+					SrcPath,
+					StagedFileType.NonUFS);
 			}
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
@@ -88,7 +92,10 @@ public class LlamaCpp : ModuleRules
 			{
 				string FullPath = Path.Combine(LibPath, DyLib);
 				PublicAdditionalLibraries.Add(FullPath);
-				RuntimeDependencies.Add(FullPath);
+				RuntimeDependencies.Add(
+					"$(BinaryOutputDir)/" + DyLib,
+					FullPath,
+					StagedFileType.NonUFS);
 			}
 		}
 	}
