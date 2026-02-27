@@ -13,7 +13,8 @@ public class LlamaCpp : ModuleRules
 			"Engine"
 		});
 
-		string ThirdPartyPath = Path.Combine(ModuleDirectory, "..", "..", "ThirdParty", "llama");
+		string PluginDir = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", ".."));
+		string ThirdPartyPath = Path.Combine(PluginDir, "ThirdParty", "llama");
 		string IncludePath = Path.Combine(ThirdPartyPath, "include");
 
 		PublicIncludePaths.Add(IncludePath);
@@ -46,7 +47,8 @@ public class LlamaCpp : ModuleRules
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
-			string LibPath = Path.Combine(ThirdPartyPath, "lib", "Win64");
+			string ImportLibPath = Path.Combine(ThirdPartyPath, "lib", "Win64");
+			string BinPath = Path.Combine(PluginDir, "Binaries", "Win64");
 
 			string[] DLLs = new string[] {
 				"ggml-base.dll",
@@ -64,24 +66,18 @@ public class LlamaCpp : ModuleRules
 
 			foreach (string Lib in ImportLibs)
 			{
-				PublicAdditionalLibraries.Add(Path.Combine(LibPath, Lib));
+				PublicAdditionalLibraries.Add(Path.Combine(ImportLibPath, Lib));
 			}
-
-			PublicRuntimeLibraryPaths.Add(LibPath);
 
 			foreach (string DLL in DLLs)
 			{
 				PublicDelayLoadDLLs.Add(DLL);
-				string SrcPath = Path.Combine(LibPath, DLL);
-				RuntimeDependencies.Add(
-					"$(BinaryOutputDir)/" + DLL,
-					SrcPath,
-					StagedFileType.NonUFS);
+				RuntimeDependencies.Add(Path.Combine(BinPath, DLL));
 			}
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
-			string LibPath = Path.Combine(ThirdPartyPath, "lib", "Mac");
+			string BinPath = Path.Combine(PluginDir, "Binaries", "Mac");
 
 			string[] DyLibs = new string[] {
 				"libggml-base.dylib",
@@ -90,16 +86,11 @@ public class LlamaCpp : ModuleRules
 				"libllama.dylib"
 			};
 
-			PublicRuntimeLibraryPaths.Add(LibPath);
-
 			foreach (string DyLib in DyLibs)
 			{
-				string FullPath = Path.Combine(LibPath, DyLib);
+				string FullPath = Path.Combine(BinPath, DyLib);
 				PublicAdditionalLibraries.Add(FullPath);
-				RuntimeDependencies.Add(
-					"$(BinaryOutputDir)/" + DyLib,
-					FullPath,
-					StagedFileType.NonUFS);
+				RuntimeDependencies.Add(FullPath);
 			}
 		}
 	}

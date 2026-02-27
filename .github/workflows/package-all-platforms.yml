@@ -42,19 +42,26 @@ jobs:
       - name: Assemble complete plugin
         run: |
           mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Android/arm64-v8a
-          mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Mac
           mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Win64
+          mkdir -p staging/LlamaCpp/Binaries/Win64
+          mkdir -p staging/LlamaCpp/Binaries/Mac
 
-          # Copy entire plugin source from repo
+          # Copy plugin source from repo
           cp LlamaCpp.uplugin staging/LlamaCpp/
           cp LlamaCpp_APL.xml staging/LlamaCpp/
           cp -r Source staging/LlamaCpp/
           cp -r ThirdParty/llama/include staging/LlamaCpp/ThirdParty/llama/
 
-          # Extract per-platform binaries into correct dirs
+          # Android .so files go in ThirdParty (bundled via APL)
           unzip /tmp/artifacts/llama-cpp-android-arm64-v8a.zip -d staging/LlamaCpp/ThirdParty/llama/lib/Android/arm64-v8a
-          unzip /tmp/artifacts/llama-cpp-macos-universal.zip -d staging/LlamaCpp/ThirdParty/llama/lib/Mac
-          unzip /tmp/artifacts/llama-cpp-windows-x64.zip -d staging/LlamaCpp/ThirdParty/llama/lib/Win64
+
+          # Windows: DLLs go in Binaries/Win64, import libs go in ThirdParty
+          unzip /tmp/artifacts/llama-cpp-windows-x64.zip -d /tmp/win64
+          cp /tmp/win64/*.lib staging/LlamaCpp/ThirdParty/llama/lib/Win64/
+          cp /tmp/win64/*.dll staging/LlamaCpp/Binaries/Win64/
+
+          # macOS: dylibs go in Binaries/Mac
+          unzip /tmp/artifacts/llama-cpp-macos-universal.zip -d staging/LlamaCpp/Binaries/Mac
 
           echo "=== Final layout ==="
           find staging -type f | sort
