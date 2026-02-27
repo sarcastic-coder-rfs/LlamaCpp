@@ -31,10 +31,8 @@ jobs:
       - name: Package dylibs
         run: |
           mkdir -p package
-          cp build/src/libllama.dylib package/
-          cp build/ggml/src/libggml.dylib package/
-          cp build/ggml/src/libggml-base.dylib package/
-          cp build/ggml/src/libggml-cpu.dylib package/
+          find build -name '*.dylib' | while read f; do cp "$f" package/; done
+          ls -la package/
           cd package && zip -r ../llama-cpp-macos-universal.zip *.dylib
 
       - name: Upload artifact
