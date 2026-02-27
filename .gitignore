@@ -1,0 +1,14 @@
+# UE5 intermediates
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
