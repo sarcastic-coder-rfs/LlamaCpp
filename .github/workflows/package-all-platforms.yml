@@ -1,0 +1,69 @@
+name: Package All Platforms
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    uses: ./.github/workflows/build-android.yml
+
+  build-macos:
+    uses: ./.github/workflows/build-macos.yml
+
+  build-windows:
+    uses: ./.github/workflows/build-windows.yml
+
+  package:
+    runs-on: ubuntu-latest
+    needs: [build-android, build-macos, build-windows]
+
+    steps:
+      - name: Checkout plugin repo
+        uses: actions/checkout@v4
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-cpp-android-arm64-v8a
+          path: /tmp/artifacts
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-cpp-macos-universal
+          path: /tmp/artifacts
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: llama-cpp-windows-x64
+          path: /tmp/artifacts
+
+      - name: Assemble ThirdParty layout
+        run: |
+          mkdir -p staging/ThirdParty/llama/lib/Android/arm64-v8a
+          mkdir -p staging/ThirdParty/llama/lib/Mac
+          mkdir -p staging/ThirdParty/llama/lib/Win64
+          mkdir -p staging/ThirdParty/llama/include
+
+          # Extract per-platform zips into correct dirs
+          unzip /tmp/artifacts/llama-cpp-android-arm64-v8a.zip -d staging/ThirdParty/llama/lib/Android/arm64-v8a
+          unzip /tmp/artifacts/llama-cpp-macos-universal.zip -d staging/ThirdParty/llama/lib/Mac
+          unzip /tmp/artifacts/llama-cpp-windows-x64.zip -d staging/ThirdParty/llama/lib/Win64
+
+          # Copy headers from repo
+          cp ThirdParty/llama/include/*.h staging/ThirdParty/llama/include/
+
+          echo "=== Final layout ==="
+          find staging -type f | sort
+
+      - name: Create combined zip
+        run: |
+          cd staging
+          zip -r ../llama-cpp-all-platforms.zip ThirdParty/
+
+      - name: Upload combined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-cpp-all-platforms
+          path: llama-cpp-all-platforms.zip
