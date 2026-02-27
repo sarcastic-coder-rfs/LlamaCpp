@@ -17,3 +17,4 @@ Thumbs.db
 ThirdParty/llama/lib/**/*.so
 ThirdParty/llama/lib/**/*.dll
 ThirdParty/llama/lib/**/*.lib
+ThirdParty/llama/lib/**/*.dylib

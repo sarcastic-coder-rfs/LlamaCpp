@@ -73,5 +73,23 @@ public class LlamaCpp : ModuleRules
 				RuntimeDependencies.Add(Path.Combine(LibPath, DLL));
 			}
 		}
+		else if (Target.Platform == UnrealTargetPlatform.Mac)
+		{
+			string LibPath = Path.Combine(ThirdPartyPath, "lib", "Mac");
+
+			string[] DyLibs = new string[] {
+				"libggml-base.dylib",
+				"libggml-cpu.dylib",
+				"libggml.dylib",
+				"libllama.dylib"
+			};
+
+			foreach (string DyLib in DyLibs)
+			{
+				string FullPath = Path.Combine(LibPath, DyLib);
+				PublicAdditionalLibraries.Add(FullPath);
+				RuntimeDependencies.Add(FullPath);
+			}
+		}
 	}
 }
