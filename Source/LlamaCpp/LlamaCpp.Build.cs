@@ -10,7 +10,8 @@ public class LlamaCpp : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			"Projects"
 		});
 
 		string ThirdPartyPath = Path.Combine(ModuleDirectory, "..", "..", "ThirdParty", "llama");

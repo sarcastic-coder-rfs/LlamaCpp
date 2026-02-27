@@ -7,4 +7,7 @@ class FLlamaCppModule : public IModuleInterface
 public:
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+private:
+	TArray<void*> DllHandles;
 };
