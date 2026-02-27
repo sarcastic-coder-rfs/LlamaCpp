@@ -1,6 +1,7 @@
 #include "LlamaCppInference.h"
 #include "Async/Async.h"
 #include "llama.h"
+#include <string>
 
 ULlamaCppInference::ULlamaCppInference()
 {
