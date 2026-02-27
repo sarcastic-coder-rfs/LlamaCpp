@@ -18,9 +18,9 @@ public class LlamaCpp : ModuleRules
 
 		PublicIncludePaths.Add(IncludePath);
 
-		// Suppress dllexport/dllimport macros — we link the .so directly
-		PublicDefinitions.Add("LLAMA_API=");
-		PublicDefinitions.Add("GGML_API=extern");
+		// Let the headers resolve dllimport (Win64) or visibility (other platforms)
+		PublicDefinitions.Add("LLAMA_SHARED=1");
+		PublicDefinitions.Add("GGML_SHARED=1");
 
 		if (Target.Platform == UnrealTargetPlatform.Android)
 		{
@@ -43,6 +43,35 @@ public class LlamaCpp : ModuleRules
 			// Android packaging via APL
 			string APLPath = Path.Combine(ModuleDirectory, "..", "..", "LlamaCpp_APL.xml");
 			AdditionalPropertiesForReceipt.Add("AndroidPlugin", APLPath);
+		}
+		else if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			string LibPath = Path.Combine(ThirdPartyPath, "lib", "Win64");
+
+			string[] DLLs = new string[] {
+				"ggml-base.dll",
+				"ggml-cpu.dll",
+				"ggml.dll",
+				"llama.dll"
+			};
+
+			string[] ImportLibs = new string[] {
+				"ggml-base.lib",
+				"ggml-cpu.lib",
+				"ggml.lib",
+				"llama.lib"
+			};
+
+			foreach (string Lib in ImportLibs)
+			{
+				PublicAdditionalLibraries.Add(Path.Combine(LibPath, Lib));
+			}
+
+			foreach (string DLL in DLLs)
+			{
+				PublicDelayLoadDLLs.Add(DLL);
+				RuntimeDependencies.Add(Path.Combine(LibPath, DLL));
+			}
 		}
 	}
 }

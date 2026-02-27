@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "LlamaCpp",
-	"Description": "llama.cpp inference for Unreal Engine (Quest 3 / Android ARM64)",
+	"Description": "llama.cpp inference for Unreal Engine",
 	"Category": "AI",
 	"CreatedBy": "",
 	"EnabledByDefault": true,
@@ -15,7 +15,8 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"PlatformAllowList": [
-				"Android"
+				"Android",
+				"Win64"
 			]
 		}
 	]

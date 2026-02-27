@@ -15,3 +15,5 @@ Thumbs.db
 
 # Prebuilt shared libraries (download from Releases)
 ThirdParty/llama/lib/**/*.so
+ThirdParty/llama/lib/**/*.dll
+ThirdParty/llama/lib/**/*.lib
