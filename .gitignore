@@ -12,3 +12,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Prebuilt shared libraries (download from Releases)
+ThirdParty/llama/lib/**/*.so
