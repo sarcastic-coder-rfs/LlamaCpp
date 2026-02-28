@@ -150,9 +150,27 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 		AudioCapture = new Audio::FAudioCapture();
 	}
 
-	Audio::FAudioCaptureDeviceParams Params;
-	if (!AudioCapture->OpenCaptureStream(Params, [this](const float* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
+	// Check if a capture device is available
+	Audio::FCaptureDeviceInfo DeviceInfo;
+	if (!AudioCapture->GetCaptureDeviceInfo(DeviceInfo))
 	{
+		UE_LOG(LogTemp, Error, TEXT("Whisper: No audio capture device found"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Using capture device: %s (SampleRate=%d, Channels=%d)"),
+		*DeviceInfo.DeviceName,
+		DeviceInfo.PreferredSampleRate,
+		DeviceInfo.InputChannels);
+
+	Audio::FAudioCaptureDeviceParams Params;
+	Audio::FOnAudioCaptureFunction OnCapture = [this](const float* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
+	{
+		if (NumFrames <= 0 || InNumChannels <= 0)
+		{
+			return;
+		}
+
 		CaptureSampleRate = static_cast<float>(InSampleRate);
 		CaptureNumChannels = InNumChannels;
 
@@ -161,13 +179,20 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 		int32 OldNum = CapturedAudioData.Num();
 		CapturedAudioData.SetNum(OldNum + NumSamples);
 		FMemory::Memcpy(CapturedAudioData.GetData() + OldNum, InAudio, NumSamples * sizeof(float));
-	}, 1024))
+	};
+
+	if (!AudioCapture->OpenCaptureStream(Params, MoveTemp(OnCapture), 1024))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Whisper: Failed to open audio capture stream"));
 		return;
 	}
 
-	AudioCapture->StartStream();
+	if (!AudioCapture->StartStream())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Whisper: Failed to start audio capture stream"));
+		return;
+	}
+
 	bIsCapturing = true;
 	UE_LOG(LogTemp, Log, TEXT("Whisper: Microphone capture started"));
 }
@@ -425,8 +450,13 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 
 			if (!bGotAudio || SrcSampleRate <= 0.0f || SrcNumChannels <= 0)
 			{
+				UE_LOG(LogTemp, Verbose, TEXT("Whisper: Realtime loop — no audio yet (samples=%d, rate=%.0f, ch=%d)"),
+					AudioSnapshot.Num(), SrcSampleRate, SrcNumChannels);
 				continue;
 			}
+
+			UE_LOG(LogTemp, Log, TEXT("Whisper: Realtime loop — processing %d samples (rate=%.0f, ch=%d)"),
+				AudioSnapshot.Num(), SrcSampleRate, SrcNumChannels);
 
 			// Resample to 16kHz mono
 			TArray<float> ResampledData;
