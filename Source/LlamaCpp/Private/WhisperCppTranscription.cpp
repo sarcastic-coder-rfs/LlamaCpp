@@ -244,8 +244,25 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 
 	CapturedAudioData.Empty();
 
-	UE_LOG(LogTemp, Log, TEXT("Whisper: Resampled to %d samples (%.1fs at 16kHz)"),
-		ResampledData.Num(), static_cast<float>(ResampledData.Num()) / WHISPER_SAMPLE_RATE);
+	// Compute RMS audio level to verify we have real audio
+	float SumSquares = 0.0f;
+	float MaxAbs = 0.0f;
+	for (int32 i = 0; i < ResampledData.Num(); ++i)
+	{
+		float S = ResampledData[i];
+		SumSquares += S * S;
+		float Abs = FMath::Abs(S);
+		if (Abs > MaxAbs) MaxAbs = Abs;
+	}
+	float RMS = ResampledData.Num() > 0 ? FMath::Sqrt(SumSquares / ResampledData.Num()) : 0.0f;
+
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Resampled to %d samples (%.1fs at 16kHz), RMS=%.6f, Peak=%.6f"),
+		ResampledData.Num(), static_cast<float>(ResampledData.Num()) / WHISPER_SAMPLE_RATE, RMS, MaxAbs);
+
+	if (RMS < 0.0001f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Whisper: Audio appears to be silent (RMS=%.6f). Check microphone permissions and device."), RMS);
+	}
 
 	RunTranscription(MoveTemp(ResampledData), Language);
 }
