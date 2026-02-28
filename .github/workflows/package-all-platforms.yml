@@ -13,9 +13,18 @@ jobs:
   build-windows:
     uses: ./.github/workflows/build-windows.yml
 
+  build-whisper-android:
+    uses: ./.github/workflows/build-whisper-android.yml
+
+  build-whisper-macos:
+    uses: ./.github/workflows/build-whisper-macos.yml
+
+  build-whisper-windows:
+    uses: ./.github/workflows/build-whisper-windows.yml
+
   package:
     runs-on: ubuntu-latest
-    needs: [build-android, build-macos, build-windows]
+    needs: [build-android, build-macos, build-windows, build-whisper-android, build-whisper-macos, build-whisper-windows]
 
     steps:
       - name: Checkout plugin repo
@@ -39,10 +48,30 @@ jobs:
           name: llama-cpp-windows-x64
           path: /tmp/artifacts
 
+      - name: Download Whisper Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: whisper-android-arm64-v8a
+          path: /tmp/artifacts
+
+      - name: Download Whisper macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: whisper-macos-universal
+          path: /tmp/artifacts
+
+      - name: Download Whisper Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: whisper-windows-x64
+          path: /tmp/artifacts
+
       - name: Assemble complete plugin
         run: |
           mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Android/arm64-v8a
           mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Win64
+          mkdir -p staging/LlamaCpp/ThirdParty/whisper/lib/Android/arm64-v8a
+          mkdir -p staging/LlamaCpp/ThirdParty/whisper/lib/Win64
           mkdir -p staging/LlamaCpp/Binaries/Win64
           mkdir -p staging/LlamaCpp/Binaries/Mac
 
@@ -51,17 +80,24 @@ jobs:
           cp LlamaCpp_APL.xml staging/LlamaCpp/
           cp -r Source staging/LlamaCpp/
           cp -r ThirdParty/llama/include staging/LlamaCpp/ThirdParty/llama/
+          cp -r ThirdParty/whisper/include staging/LlamaCpp/ThirdParty/whisper/
 
           # Android .so files go in ThirdParty (bundled via APL)
           unzip /tmp/artifacts/llama-cpp-android-arm64-v8a.zip -d staging/LlamaCpp/ThirdParty/llama/lib/Android/arm64-v8a
+          unzip /tmp/artifacts/whisper-android-arm64-v8a.zip -d staging/LlamaCpp/ThirdParty/whisper/lib/Android/arm64-v8a
 
           # Windows: DLLs go in Binaries/Win64, import libs go in ThirdParty
           unzip /tmp/artifacts/llama-cpp-windows-x64.zip -d /tmp/win64
           cp /tmp/win64/*.lib staging/LlamaCpp/ThirdParty/llama/lib/Win64/
           cp /tmp/win64/*.dll staging/LlamaCpp/Binaries/Win64/
 
+          unzip /tmp/artifacts/whisper-windows-x64.zip -d /tmp/win64-whisper
+          cp /tmp/win64-whisper/*.lib staging/LlamaCpp/ThirdParty/whisper/lib/Win64/
+          cp /tmp/win64-whisper/*.dll staging/LlamaCpp/Binaries/Win64/
+
           # macOS: dylibs go in Binaries/Mac
           unzip /tmp/artifacts/llama-cpp-macos-universal.zip -d staging/LlamaCpp/Binaries/Mac
+          unzip /tmp/artifacts/whisper-macos-universal.zip -d staging/LlamaCpp/Binaries/Mac
 
           echo "=== Final layout ==="
           find staging -type f | sort

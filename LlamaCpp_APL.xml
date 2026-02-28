@@ -15,6 +15,8 @@
 				  dst="$S(BuildDir)/libs/arm64-v8a/libggml.so"/>
 		<copyFile src="$S(PluginDir)/ThirdParty/llama/lib/Android/arm64-v8a/libllama.so"
 				  dst="$S(BuildDir)/libs/arm64-v8a/libllama.so"/>
+		<copyFile src="$S(PluginDir)/ThirdParty/whisper/lib/Android/arm64-v8a/libwhisper.so"
+				  dst="$S(BuildDir)/libs/arm64-v8a/libwhisper.so"/>
 	</resourceCopies>
 
 	<!-- Load .so files in dependency order -->
@@ -23,5 +25,11 @@
 		<loadLibrary name="ggml-cpu" failmsg="Failed to load libggml-cpu.so"/>
 		<loadLibrary name="ggml" failmsg="Failed to load libggml.so"/>
 		<loadLibrary name="llama" failmsg="Failed to load libllama.so"/>
+		<loadLibrary name="whisper" failmsg="Failed to load libwhisper.so"/>
 	</soLoadLibrary>
+
+	<!-- Permissions -->
+	<androidManifestUpdates>
+		<addPermission android:name="android.permission.RECORD_AUDIO"/>
+	</androidManifestUpdates>
 </root>

@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "LlamaCpp",
-	"Description": "llama.cpp inference for Unreal Engine",
+	"Description": "llama.cpp inference and whisper.cpp speech-to-text for Unreal Engine",
 	"Category": "AI",
 	"CreatedBy": "",
 	"EnabledByDefault": true,

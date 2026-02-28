@@ -18,3 +18,7 @@ ThirdParty/llama/lib/**/*.so
 ThirdParty/llama/lib/**/*.dll
 ThirdParty/llama/lib/**/*.lib
 ThirdParty/llama/lib/**/*.dylib
+ThirdParty/whisper/lib/**/*.so
+ThirdParty/whisper/lib/**/*.dll
+ThirdParty/whisper/lib/**/*.lib
+ThirdParty/whisper/lib/**/*.dylib

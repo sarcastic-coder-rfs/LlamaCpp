@@ -10,18 +10,25 @@ public class LlamaCpp : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			"AudioCapture",
+			"AudioMixer"
 		});
 
 		string PluginDir = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", ".."));
 		string ThirdPartyPath = Path.Combine(PluginDir, "ThirdParty", "llama");
 		string IncludePath = Path.Combine(ThirdPartyPath, "include");
 
+		string WhisperThirdPartyPath = Path.Combine(PluginDir, "ThirdParty", "whisper");
+		string WhisperIncludePath = Path.Combine(WhisperThirdPartyPath, "include");
+
 		PublicIncludePaths.Add(IncludePath);
+		PublicIncludePaths.Add(WhisperIncludePath);
 
 		// Let the headers resolve dllimport (Win64) or visibility (other platforms)
 		PublicDefinitions.Add("LLAMA_SHARED=1");
 		PublicDefinitions.Add("GGML_SHARED=1");
+		PublicDefinitions.Add("WHISPER_SHARED=1");
 
 		if (Target.Platform == UnrealTargetPlatform.Android)
 		{
@@ -40,6 +47,12 @@ public class LlamaCpp : ModuleRules
 				PublicAdditionalLibraries.Add(FullPath);
 				RuntimeDependencies.Add(FullPath);
 			}
+
+			// Whisper shared library
+			string WhisperLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Android", "arm64-v8a");
+			string WhisperSo = Path.Combine(WhisperLibPath, "libwhisper.so");
+			PublicAdditionalLibraries.Add(WhisperSo);
+			RuntimeDependencies.Add(WhisperSo);
 
 			// Android packaging via APL
 			string APLPath = Path.Combine(ModuleDirectory, "..", "..", "LlamaCpp_APL.xml");
@@ -74,6 +87,12 @@ public class LlamaCpp : ModuleRules
 				PublicDelayLoadDLLs.Add(DLL);
 				RuntimeDependencies.Add(Path.Combine(BinPath, DLL));
 			}
+
+			// Whisper
+			string WhisperImportLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Win64");
+			PublicAdditionalLibraries.Add(Path.Combine(WhisperImportLibPath, "whisper.lib"));
+			PublicDelayLoadDLLs.Add("whisper.dll");
+			RuntimeDependencies.Add(Path.Combine(BinPath, "whisper.dll"));
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
@@ -92,6 +111,11 @@ public class LlamaCpp : ModuleRules
 				PublicAdditionalLibraries.Add(FullPath);
 				RuntimeDependencies.Add(FullPath);
 			}
+
+			// Whisper
+			string WhisperDyLib = Path.Combine(BinPath, "libwhisper.dylib");
+			PublicAdditionalLibraries.Add(WhisperDyLib);
+			RuntimeDependencies.Add(WhisperDyLib);
 		}
 	}
 }

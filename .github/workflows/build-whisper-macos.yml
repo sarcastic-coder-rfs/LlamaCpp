@@ -1,0 +1,51 @@
+name: Build whisper.cpp macOS Universal
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout whisper.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          ref: v1.7.5
+
+      - name: Configure CMake (universal binary)
+        run: |
+          cmake -B build \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_NATIVE=OFF \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --target whisper -j $(sysctl -n hw.logicalcpu)
+
+      - name: Package dylib
+        run: |
+          mkdir -p package
+          find build -name 'libwhisper.dylib' -exec cp {} package/ \;
+          ls -la package/
+          cd package && zip -r ../whisper-macos-universal.zip *.dylib
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-macos-universal
+          path: whisper-macos-universal.zip
+
+      - name: Upload release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: whisper-macos-universal.zip
