@@ -1,8 +1,30 @@
 using UnrealBuildTool;
 using System.IO;
+using System.Collections.Generic;
 
 public class LlamaCpp : ModuleRules
 {
+	private static void RequireFiles(string platformName, IEnumerable<string> requiredPaths)
+	{
+		List<string> missingFiles = new List<string>();
+
+		foreach (string requiredPath in requiredPaths)
+		{
+			if (!File.Exists(requiredPath))
+			{
+				missingFiles.Add(requiredPath);
+			}
+		}
+
+		if (missingFiles.Count > 0)
+		{
+			throw new BuildException(
+				$"LlamaCpp preflight failed for {platformName}. Missing required native binaries:\n - " +
+				string.Join("\n - ", missingFiles) +
+				"\nAdd the missing files under ThirdParty/llama or ThirdParty/whisper before building.");
+		}
+	}
+
 	public LlamaCpp(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -12,6 +34,7 @@ public class LlamaCpp : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"AudioCapture",
+			"AudioCaptureCore",
 			"AudioMixer"
 		});
 
@@ -41,9 +64,12 @@ public class LlamaCpp : ModuleRules
 				"libllama.so"
 			};
 
+			List<string> RequiredAndroidFiles = new List<string>();
+
 			foreach (string Lib in Libs)
 			{
 				string FullPath = Path.Combine(LibPath, Lib);
+				RequiredAndroidFiles.Add(FullPath);
 				PublicAdditionalLibraries.Add(FullPath);
 				RuntimeDependencies.Add(FullPath);
 			}
@@ -51,11 +77,14 @@ public class LlamaCpp : ModuleRules
 			// Whisper shared library
 			string WhisperLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Android", "arm64-v8a");
 			string WhisperSo = Path.Combine(WhisperLibPath, "libwhisper.so");
+			RequiredAndroidFiles.Add(WhisperSo);
 			PublicAdditionalLibraries.Add(WhisperSo);
 			RuntimeDependencies.Add(WhisperSo);
 
 			// Android packaging via APL
 			string APLPath = Path.Combine(ModuleDirectory, "..", "..", "LlamaCpp_APL.xml");
+			RequiredAndroidFiles.Add(APLPath);
+			RequireFiles("Android", RequiredAndroidFiles);
 			AdditionalPropertiesForReceipt.Add("AndroidPlugin", APLPath);
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Win64)
@@ -77,22 +106,33 @@ public class LlamaCpp : ModuleRules
 				"llama.lib"
 			};
 
+			List<string> RequiredWin64Files = new List<string>();
+
 			foreach (string Lib in ImportLibs)
 			{
-				PublicAdditionalLibraries.Add(Path.Combine(ImportLibPath, Lib));
+				string FullImportLibPath = Path.Combine(ImportLibPath, Lib);
+				RequiredWin64Files.Add(FullImportLibPath);
+				PublicAdditionalLibraries.Add(FullImportLibPath);
 			}
 
 			foreach (string DLL in DLLs)
 			{
+				RequiredWin64Files.Add(Path.Combine(BinPath, DLL));
 				PublicDelayLoadDLLs.Add(DLL);
 				RuntimeDependencies.Add(Path.Combine(BinPath, DLL));
 			}
 
 			// Whisper
 			string WhisperImportLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Win64");
-			PublicAdditionalLibraries.Add(Path.Combine(WhisperImportLibPath, "whisper.lib"));
+			string WhisperImportLib = Path.Combine(WhisperImportLibPath, "whisper.lib");
+			string WhisperDll = Path.Combine(BinPath, "whisper.dll");
+			RequiredWin64Files.Add(WhisperImportLib);
+			RequiredWin64Files.Add(WhisperDll);
+			PublicAdditionalLibraries.Add(WhisperImportLib);
 			PublicDelayLoadDLLs.Add("whisper.dll");
-			RuntimeDependencies.Add(Path.Combine(BinPath, "whisper.dll"));
+			RuntimeDependencies.Add(WhisperDll);
+
+			RequireFiles("Win64", RequiredWin64Files);
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
@@ -105,17 +145,23 @@ public class LlamaCpp : ModuleRules
 				"libllama.dylib"
 			};
 
+			List<string> RequiredMacFiles = new List<string>();
+
 			foreach (string DyLib in DyLibs)
 			{
 				string FullPath = Path.Combine(BinPath, DyLib);
+				RequiredMacFiles.Add(FullPath);
 				PublicAdditionalLibraries.Add(FullPath);
 				RuntimeDependencies.Add(FullPath);
 			}
 
 			// Whisper
 			string WhisperDyLib = Path.Combine(BinPath, "libwhisper.dylib");
+			RequiredMacFiles.Add(WhisperDyLib);
 			PublicAdditionalLibraries.Add(WhisperDyLib);
 			RuntimeDependencies.Add(WhisperDyLib);
+
+			RequireFiles("Mac", RequiredMacFiles);
 		}
 	}
 }

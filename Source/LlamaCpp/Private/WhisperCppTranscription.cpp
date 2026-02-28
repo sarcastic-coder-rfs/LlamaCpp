@@ -2,7 +2,7 @@
 #include "Async/Async.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
-#include "AudioCapture.h"
+#include "AudioCaptureCore.h"
 #include "whisper.h"
 
 UWhisperCppTranscription::UWhisperCppTranscription()
