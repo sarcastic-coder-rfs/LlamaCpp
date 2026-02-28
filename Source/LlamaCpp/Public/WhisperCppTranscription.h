@@ -38,6 +38,7 @@ struct FWhisperTranscriptionResult
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWhisperModelLoaded, bool, bSuccess);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTranscriptionComplete, const FWhisperTranscriptionResult&, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPartialTranscription, const FString&, PartialText);
 
 UCLASS(BlueprintType, Blueprintable)
 class LLAMACPP_API UWhisperCppTranscription : public UObject
@@ -72,11 +73,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Whisper")
 	void StopTranscription();
 
+	UFUNCTION(BlueprintCallable, Category = "Whisper")
+	void StartRealtimeTranscription(const FString& Language = TEXT("en"), float IntervalSeconds = 3.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "Whisper")
+	void StopRealtimeTranscription();
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Whisper")
+	bool IsRealtimeTranscribing() const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Whisper")
 	FOnWhisperModelLoaded OnModelLoaded;
 
 	UPROPERTY(BlueprintAssignable, Category = "Whisper")
 	FOnTranscriptionComplete OnTranscriptionComplete;
+
+	UPROPERTY(BlueprintAssignable, Category = "Whisper")
+	FOnPartialTranscription OnPartialTranscription;
 
 private:
 	whisper_context* WhisperCtx = nullptr;
@@ -95,4 +108,10 @@ private:
 	void RunTranscription(TArray<float> AudioData, const FString& Language);
 	bool LoadWavFile(const FString& FilePath, TArray<float>& OutAudioData, int32& OutSampleRate, int32& OutNumChannels);
 	void ResampleTo16kMono(const TArray<float>& InData, int32 InSampleRate, int32 InNumChannels, TArray<float>& OutData);
+
+	void RealtimeTranscriptionLoop(FString Language, float IntervalSeconds);
+
+	TAtomic<bool> bIsRealtimeTranscribing{false};
+	FString AccumulatedTranscription;
+	FString LastWindowText;
 };

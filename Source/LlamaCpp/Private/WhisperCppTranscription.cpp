@@ -13,6 +13,11 @@ void UWhisperCppTranscription::BeginDestroy()
 {
 	StopTranscription();
 
+	if (bIsRealtimeTranscribing)
+	{
+		bIsRealtimeTranscribing = false;
+	}
+
 	if (bIsCapturing)
 	{
 		if (AudioCapture)
@@ -305,6 +310,273 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 				Self->OnTranscriptionComplete.Broadcast(Result);
 			}
 		});
+	});
+}
+
+void UWhisperCppTranscription::StartRealtimeTranscription(const FString& Language, float IntervalSeconds)
+{
+	if (bIsRealtimeTranscribing)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Whisper: Already in realtime transcription mode"));
+		return;
+	}
+
+	if (!IsModelLoaded())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Whisper: Cannot start realtime transcription — no model loaded"));
+		return;
+	}
+
+	AccumulatedTranscription.Empty();
+	LastWindowText.Empty();
+
+	// Start mic capture if not already capturing
+	if (!bIsCapturing)
+	{
+		StartMicrophoneCapture();
+		if (!bIsCapturing)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Whisper: Failed to start microphone for realtime transcription"));
+			return;
+		}
+	}
+
+	bIsRealtimeTranscribing = true;
+
+	float ClampedInterval = FMath::Max(IntervalSeconds, 0.5f);
+
+	RealtimeTranscriptionLoop(Language, ClampedInterval);
+
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Realtime transcription started (interval=%.1fs)"), ClampedInterval);
+}
+
+void UWhisperCppTranscription::StopRealtimeTranscription()
+{
+	if (!bIsRealtimeTranscribing)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Whisper: Not in realtime transcription mode"));
+		return;
+	}
+
+	bIsRealtimeTranscribing = false;
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Stopping realtime transcription..."));
+
+	// Stop microphone
+	if (bIsCapturing && AudioCapture)
+	{
+		AudioCapture->StopStream();
+		AudioCapture->CloseStream();
+		bIsCapturing = false;
+	}
+
+	// Fire OnTranscriptionComplete with accumulated text
+	FWhisperTranscriptionResult FinalResult;
+	FinalResult.FullText = AccumulatedTranscription;
+	FinalResult.bSuccess = true;
+	OnTranscriptionComplete.Broadcast(FinalResult);
+
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Realtime transcription stopped. Final text: %s"), *AccumulatedTranscription);
+}
+
+bool UWhisperCppTranscription::IsRealtimeTranscribing() const
+{
+	return bIsRealtimeTranscribing;
+}
+
+void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float IntervalSeconds)
+{
+	TWeakObjectPtr<UWhisperCppTranscription> WeakThis(this);
+	whisper_context* BgCtx = WhisperCtx;
+	TAtomic<bool>* RealtimeFlag = &bIsRealtimeTranscribing;
+
+	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag]()
+	{
+		const int32 MaxWindowSamples = 30 * WHISPER_SAMPLE_RATE; // 30 seconds at 16kHz = 480000
+
+		while (*RealtimeFlag)
+		{
+			FPlatformProcess::Sleep(IntervalSeconds);
+
+			if (!*RealtimeFlag)
+			{
+				break;
+			}
+
+			// Copy current audio buffer under lock
+			TArray<float> AudioSnapshot;
+			float SrcSampleRate = 0.0f;
+			int32 SrcNumChannels = 0;
+			bool bGotAudio = false;
+
+			if (UWhisperCppTranscription* Self = WeakThis.Get())
+			{
+				{
+					FScopeLock Lock(&Self->CapturedAudioLock);
+					AudioSnapshot = Self->CapturedAudioData;
+					SrcSampleRate = Self->CaptureSampleRate;
+					SrcNumChannels = Self->CaptureNumChannels;
+				}
+				bGotAudio = AudioSnapshot.Num() > 0;
+			}
+			else
+			{
+				break;
+			}
+
+			if (!bGotAudio || SrcSampleRate <= 0.0f || SrcNumChannels <= 0)
+			{
+				continue;
+			}
+
+			// Resample to 16kHz mono
+			TArray<float> ResampledData;
+			int32 IntSampleRate = static_cast<int32>(SrcSampleRate);
+
+			if (IntSampleRate != WHISPER_SAMPLE_RATE || SrcNumChannels != 1)
+			{
+				// Inline resampling (can't call member function from background thread safely)
+				// Downmix to mono
+				TArray<float> MonoData;
+				int32 NumFrames = AudioSnapshot.Num() / SrcNumChannels;
+
+				if (SrcNumChannels > 1)
+				{
+					MonoData.SetNum(NumFrames);
+					for (int32 i = 0; i < NumFrames; ++i)
+					{
+						float Sum = 0.0f;
+						for (int32 c = 0; c < SrcNumChannels; ++c)
+						{
+							Sum += AudioSnapshot[i * SrcNumChannels + c];
+						}
+						MonoData[i] = Sum / static_cast<float>(SrcNumChannels);
+					}
+				}
+				else
+				{
+					MonoData = MoveTemp(AudioSnapshot);
+				}
+
+				// Resample
+				if (IntSampleRate == WHISPER_SAMPLE_RATE)
+				{
+					ResampledData = MoveTemp(MonoData);
+				}
+				else
+				{
+					double Ratio = static_cast<double>(WHISPER_SAMPLE_RATE) / static_cast<double>(IntSampleRate);
+					int32 OutNumFrames = static_cast<int32>(NumFrames * Ratio);
+					ResampledData.SetNum(OutNumFrames);
+
+					for (int32 i = 0; i < OutNumFrames; ++i)
+					{
+						double SrcIndex = static_cast<double>(i) / Ratio;
+						int32 Idx0 = static_cast<int32>(SrcIndex);
+						int32 Idx1 = FMath::Min(Idx0 + 1, NumFrames - 1);
+						double Frac = SrcIndex - static_cast<double>(Idx0);
+						ResampledData[i] = static_cast<float>(MonoData[Idx0] * (1.0 - Frac) + MonoData[Idx1] * Frac);
+					}
+				}
+			}
+			else
+			{
+				ResampledData = MoveTemp(AudioSnapshot);
+			}
+
+			// Keep only last 30 seconds
+			if (ResampledData.Num() > MaxWindowSamples)
+			{
+				int32 StartOffset = ResampledData.Num() - MaxWindowSamples;
+				TArray<float> Trimmed;
+				Trimmed.SetNum(MaxWindowSamples);
+				FMemory::Memcpy(Trimmed.GetData(), ResampledData.GetData() + StartOffset, MaxWindowSamples * sizeof(float));
+				ResampledData = MoveTemp(Trimmed);
+			}
+
+			// Run whisper
+			whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+			WParams.n_threads = FMath::Min(FPlatformMisc::NumberOfCoresIncludingHyperthreads(), 4);
+			WParams.print_progress = false;
+			WParams.print_special = false;
+			WParams.print_realtime = false;
+			WParams.print_timestamps = false;
+			WParams.single_segment = false;
+			WParams.no_timestamps = true;
+
+			std::string LanguageUtf8 = TCHAR_TO_UTF8(*Language);
+			WParams.language = LanguageUtf8.c_str();
+
+			// Use realtime flag as abort callback
+			WParams.abort_callback = [](void* UserData) -> bool
+			{
+				TAtomic<bool>* Flag = static_cast<TAtomic<bool>*>(UserData);
+				return !(*Flag); // Abort if no longer in realtime mode
+			};
+			WParams.abort_callback_user_data = RealtimeFlag;
+
+			int Ret = whisper_full(BgCtx, WParams, ResampledData.GetData(), ResampledData.Num());
+
+			if (Ret != 0 || !*RealtimeFlag)
+			{
+				continue;
+			}
+
+			// Extract full window text
+			FString WindowText;
+			int NSegments = whisper_full_n_segments(BgCtx);
+			for (int i = 0; i < NSegments; ++i)
+			{
+				const char* SegText = whisper_full_get_segment_text(BgCtx, i);
+				WindowText += UTF8_TO_TCHAR(SegText);
+			}
+
+			WindowText = WindowText.TrimStartAndEnd();
+
+			// Compute delta: find new text by checking if window text starts with or contains last window text
+			FString DeltaText;
+
+			if (UWhisperCppTranscription* Self = WeakThis.Get())
+			{
+				if (Self->LastWindowText.IsEmpty())
+				{
+					DeltaText = WindowText;
+				}
+				else if (WindowText.Len() > Self->LastWindowText.Len() && WindowText.StartsWith(Self->LastWindowText))
+				{
+					DeltaText = WindowText.Mid(Self->LastWindowText.Len()).TrimStartAndEnd();
+				}
+				else if (!WindowText.Equals(Self->LastWindowText))
+				{
+					// Window shifted significantly, treat all as new
+					DeltaText = WindowText;
+				}
+
+				Self->LastWindowText = WindowText;
+
+				if (!DeltaText.IsEmpty())
+				{
+					if (!Self->AccumulatedTranscription.IsEmpty())
+					{
+						Self->AccumulatedTranscription += TEXT(" ");
+					}
+					Self->AccumulatedTranscription += DeltaText;
+
+					// Broadcast on game thread
+					FString PartialText = DeltaText;
+					AsyncTask(ENamedThreads::GameThread, [WeakThis, PartialText]()
+					{
+						if (UWhisperCppTranscription* GameSelf = WeakThis.Get())
+						{
+							GameSelf->OnPartialTranscription.Broadcast(PartialText);
+						}
+					});
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
 	});
 }
 
