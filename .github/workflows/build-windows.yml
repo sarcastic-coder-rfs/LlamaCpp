@@ -7,6 +7,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 env:
   LLAMA_CPP_TAG: b8169
 
