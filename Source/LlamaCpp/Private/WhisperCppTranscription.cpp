@@ -308,10 +308,10 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		{
 			WParams.n_threads = 4;
 		}
-		WParams.print_progress = false;
-		WParams.print_special = false;
-		WParams.print_realtime = false;
-		WParams.print_timestamps = false;
+		WParams.print_progress = true;
+		WParams.print_special = true;
+		WParams.print_realtime = true;
+		WParams.print_timestamps = true;
 		WParams.single_segment = false;
 		WParams.no_timestamps = false;
 
