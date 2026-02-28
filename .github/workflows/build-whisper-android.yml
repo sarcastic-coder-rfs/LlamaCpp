@@ -40,12 +40,15 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --target whisper -j $(nproc)
+        run: cmake --build build --config Release --target whisper ggml ggml-base ggml-cpu -j $(nproc)
 
-      - name: Package shared library
+      - name: Package shared libraries
         run: |
           mkdir -p package
           find build -name 'libwhisper.so' -exec cp {} package/ \;
+          find build -name 'libggml-base.so' -exec cp {} package/ \;
+          find build -name 'libggml-cpu.so' -exec cp {} package/ \;
+          find build -name 'libggml.so' -exec cp {} package/ \;
           ls -la package/
           cd package && zip -r ../whisper-android-arm64-v8a.zip *.so
 

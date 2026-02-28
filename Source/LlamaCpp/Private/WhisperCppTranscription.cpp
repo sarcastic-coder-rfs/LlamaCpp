@@ -244,6 +244,9 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 
 	CapturedAudioData.Empty();
 
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Resampled to %d samples (%.1fs at 16kHz)"),
+		ResampledData.Num(), static_cast<float>(ResampledData.Num()) / WHISPER_SAMPLE_RATE);
+
 	RunTranscription(MoveTemp(ResampledData), Language);
 }
 
@@ -295,11 +298,17 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		};
 		WParams.abort_callback_user_data = CancelFlag;
 
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Running whisper_full with %d samples (%.1fs of audio)"),
+			AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
+
 		int Ret = whisper_full(BgCtx, WParams, AudioData.GetData(), AudioData.Num());
+
+		UE_LOG(LogTemp, Log, TEXT("Whisper: whisper_full returned %d"), Ret);
 
 		if (Ret == 0)
 		{
 			int NSegments = whisper_full_n_segments(BgCtx);
+			UE_LOG(LogTemp, Log, TEXT("Whisper: Got %d segments"), NSegments);
 			FString FullText;
 
 			for (int i = 0; i < NSegments; ++i)

@@ -32,12 +32,15 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release --target whisper -j $(sysctl -n hw.logicalcpu)
+        run: cmake --build build --config Release --target whisper ggml ggml-base ggml-cpu -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package dylib
+      - name: Package dylibs
         run: |
           mkdir -p package
           find build -name 'libwhisper.dylib' -exec cp {} package/ \;
+          find build -name 'libggml-base.dylib' -exec cp {} package/ \;
+          find build -name 'libggml-cpu.dylib' -exec cp {} package/ \;
+          find build -name 'libggml.dylib' -exec cp {} package/ \;
           ls -la package/
           cd package && zip -r ../whisper-macos-universal.zip *.dylib
 

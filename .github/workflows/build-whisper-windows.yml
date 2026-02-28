@@ -26,24 +26,21 @@ jobs:
           cmake -B build -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF
 
       - name: Build
-        run: cmake --build build --config Release --target whisper
+        run: cmake --build build --config Release --target whisper ggml ggml-base ggml-cpu
 
-      - name: Package DLL and import library
+      - name: Package DLLs and import libraries
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path artifact | Out-Null
-          # Find whisper.dll and whisper.lib from build output
-          Get-ChildItem -Path build -Recurse -Filter "whisper.dll" |
-            Where-Object { $_.DirectoryName -match "Release" -or $_.DirectoryName -match "bin" } |
-            Copy-Item -Destination artifact
-          Get-ChildItem -Path build -Recurse -Filter "whisper.lib" |
-            Where-Object { $_.DirectoryName -match "Release" -or $_.DirectoryName -match "lib" } |
-            Copy-Item -Destination artifact
-          # Fallback: grab any remaining whisper DLLs/libs
-          Get-ChildItem -Path build -Recurse -Filter "whisper.dll" |
-            Copy-Item -Destination artifact -ErrorAction SilentlyContinue
-          Get-ChildItem -Path build -Recurse -Filter "whisper.lib" |
-            Copy-Item -Destination artifact -ErrorAction SilentlyContinue
+          # Collect all DLLs and import libs for whisper + its ggml dependencies
+          foreach ($name in @("whisper", "ggml-base", "ggml-cpu", "ggml")) {
+            Get-ChildItem -Path build -Recurse -Filter "$name.dll" |
+              Select-Object -First 1 |
+              Copy-Item -Destination artifact
+            Get-ChildItem -Path build -Recurse -Filter "$name.lib" |
+              Select-Object -First 1 |
+              Copy-Item -Destination artifact
+          }
           Get-ChildItem artifact
           Compress-Archive -Path artifact\* -DestinationPath whisper-windows-x64.zip
 
