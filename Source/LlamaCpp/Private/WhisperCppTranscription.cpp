@@ -264,6 +264,17 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 		UE_LOG(LogTemp, Warning, TEXT("Whisper: Audio appears to be silent (RMS=%.6f). Check microphone permissions and device."), RMS);
 	}
 
+	// Normalize audio to peak near 1.0 — whisper expects full-range float audio
+	if (MaxAbs > 0.0f && MaxAbs < 0.5f)
+	{
+		float Gain = 0.9f / MaxAbs;
+		for (int32 i = 0; i < ResampledData.Num(); ++i)
+		{
+			ResampledData[i] *= Gain;
+		}
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Normalized audio (gain=%.1fx, new peak=%.2f)"), Gain, MaxAbs * Gain);
+	}
+
 	RunTranscription(MoveTemp(ResampledData), Language);
 }
 
@@ -547,6 +558,24 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 				Trimmed.SetNum(MaxWindowSamples);
 				FMemory::Memcpy(Trimmed.GetData(), ResampledData.GetData() + StartOffset, MaxWindowSamples * sizeof(float));
 				ResampledData = MoveTemp(Trimmed);
+			}
+
+			// Normalize audio for whisper
+			{
+				float PeakAbs = 0.0f;
+				for (int32 i = 0; i < ResampledData.Num(); ++i)
+				{
+					float Abs = FMath::Abs(ResampledData[i]);
+					if (Abs > PeakAbs) PeakAbs = Abs;
+				}
+				if (PeakAbs > 0.0f && PeakAbs < 0.5f)
+				{
+					float Gain = 0.9f / PeakAbs;
+					for (int32 i = 0; i < ResampledData.Num(); ++i)
+					{
+						ResampledData[i] *= Gain;
+					}
+				}
 			}
 
 			// Run whisper
