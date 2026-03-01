@@ -325,7 +325,12 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 
 		UE_LOG(LogTemp, Log, TEXT("Whisper: Background thread started, BgCtx=%p, samples=%d"), BgCtx, AudioData.Num());
 
+		// Verify DLL is functional
+		const char* SysInfo = whisper_print_system_info();
+		UE_LOG(LogTemp, Log, TEXT("Whisper: System info: %s"), UTF8_TO_TCHAR(SysInfo));
+
 		whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+		UE_LOG(LogTemp, Log, TEXT("Whisper: default_params obtained, strategy=%d, n_threads=%d"), (int)WParams.strategy, WParams.n_threads);
 		WParams.n_threads = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
 		if (WParams.n_threads > 4)
 		{
@@ -345,8 +350,10 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		WParams.abort_callback = nullptr;
 		WParams.abort_callback_user_data = nullptr;
 
-		UE_LOG(LogTemp, Log, TEXT("Whisper: Running whisper_full with %d samples (%.1fs of audio)"),
-			AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Running whisper_full with %d samples (%.1fs), data=%p, ctx=%p, n_threads=%d, lang=%s"),
+			AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE,
+			AudioData.GetData(), BgCtx, WParams.n_threads,
+			UTF8_TO_TCHAR(WParams.language ? WParams.language : "null"));
 
 		int Ret = whisper_full(BgCtx, WParams, AudioData.GetData(), AudioData.Num());
 
