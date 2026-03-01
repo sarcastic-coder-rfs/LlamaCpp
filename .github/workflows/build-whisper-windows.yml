@@ -21,26 +21,38 @@ jobs:
           repository: ggml-org/whisper.cpp
           ref: v1.8.3
 
-      - name: Configure CMake
+      - name: Patch CMake to build whisper as shared with static ggml
+        shell: pwsh
         run: |
-          cmake -B build -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF
+          # Build ggml as static (BUILD_SHARED_LIBS=OFF), but force whisper
+          # target to be SHARED so ggml is linked statically inside whisper.dll.
+          # This avoids DLL conflicts with llama.cpp's own ggml DLLs.
+          $content = Get-Content -Path src/CMakeLists.txt -Raw
+          $content = $content -replace 'add_library\(whisper\b', 'add_library(whisper SHARED'
+          Set-Content -Path src/CMakeLists.txt -Value $content
+          # Append dllexport defines (normally only set when BUILD_SHARED_LIBS=ON)
+          Add-Content -Path src/CMakeLists.txt -Value "`ntarget_compile_definitions(whisper PRIVATE WHISPER_SHARED WHISPER_BUILD)"
+          Write-Host "Patched src/CMakeLists.txt:"
+          Get-Content src/CMakeLists.txt | Select-Object -Last 10
+
+      - name: Configure CMake (static ggml, shared whisper)
+        run: |
+          cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DCMAKE_POLICY_DEFAULT_CMP0063=NEW -DCMAKE_C_VISIBILITY_PRESET=hidden -DCMAKE_CXX_VISIBILITY_PRESET=hidden
 
       - name: Build
-        run: cmake --build build --config Release --target whisper ggml ggml-base ggml-cpu
+        run: cmake --build build --config Release --target whisper
 
-      - name: Package DLLs and import libraries
+      - name: Package whisper DLL (self-contained, ggml statically linked)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path artifact | Out-Null
-          # Collect all DLLs and import libs for whisper + its ggml dependencies
-          foreach ($name in @("whisper", "ggml-base", "ggml-cpu", "ggml")) {
-            Get-ChildItem -Path build -Recurse -Filter "$name.dll" |
-              Select-Object -First 1 |
-              Copy-Item -Destination artifact
-            Get-ChildItem -Path build -Recurse -Filter "$name.lib" |
-              Select-Object -First 1 |
-              Copy-Item -Destination artifact
-          }
+          # Only whisper.dll needed - ggml is statically linked inside
+          Get-ChildItem -Path build -Recurse -Filter "whisper.dll" |
+            Select-Object -First 1 |
+            Copy-Item -Destination artifact
+          Get-ChildItem -Path build -Recurse -Filter "whisper.lib" |
+            Select-Object -First 1 |
+            Copy-Item -Destination artifact
           Get-ChildItem artifact
           Compress-Archive -Path artifact\* -DestinationPath whisper-windows-x64.zip
 

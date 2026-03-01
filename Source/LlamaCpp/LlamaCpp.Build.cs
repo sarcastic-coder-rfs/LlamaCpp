@@ -48,15 +48,16 @@ public class LlamaCpp : ModuleRules
 		PublicIncludePaths.Add(IncludePath);
 		PublicIncludePaths.Add(WhisperIncludePath);
 
-		// Let the headers resolve dllimport (Win64) or visibility (other platforms)
+		// llama/ggml use shared libs on all platforms; whisper uses shared on all platforms
+		// (whisper.dll/dylib/so has ggml statically linked inside - no separate ggml libs for whisper)
 		PublicDefinitions.Add("LLAMA_SHARED=1");
 		PublicDefinitions.Add("GGML_SHARED=1");
 		PublicDefinitions.Add("WHISPER_SHARED=1");
 
 		if (Target.Platform == UnrealTargetPlatform.Android)
 		{
+			// llama.cpp shared libraries (with separate ggml .so files)
 			string LibPath = Path.Combine(ThirdPartyPath, "lib", "Android", "arm64-v8a");
-
 			string[] Libs = new string[] {
 				"libggml-base.so",
 				"libggml-cpu.so",
@@ -74,7 +75,7 @@ public class LlamaCpp : ModuleRules
 				RuntimeDependencies.Add(FullPath);
 			}
 
-			// Whisper shared library
+			// whisper.so is self-contained (ggml statically linked inside)
 			string WhisperLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Android", "arm64-v8a");
 			string WhisperSo = Path.Combine(WhisperLibPath, "libwhisper.so");
 			RequiredAndroidFiles.Add(WhisperSo);
@@ -89,17 +90,9 @@ public class LlamaCpp : ModuleRules
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
-			string ImportLibPath = Path.Combine(ThirdPartyPath, "lib", "Win64");
-			string BinPath = Path.Combine(PluginDir, "Binaries", "Win64");
-
-			string[] DLLs = new string[] {
-				"ggml-base.dll",
-				"ggml-cpu.dll",
-				"ggml.dll",
-				"llama.dll"
-			};
-
-			string[] ImportLibs = new string[] {
+			// llama.cpp import libraries (these reference ggml*.dll and llama.dll)
+			string LlamaLibPath = Path.Combine(ThirdPartyPath, "lib", "Win64");
+			string[] LlamaImportLibs = new string[] {
 				"ggml-base.lib",
 				"ggml-cpu.lib",
 				"ggml.lib",
@@ -108,29 +101,29 @@ public class LlamaCpp : ModuleRules
 
 			List<string> RequiredWin64Files = new List<string>();
 
-			foreach (string Lib in ImportLibs)
+			foreach (string Lib in LlamaImportLibs)
 			{
-				string FullImportLibPath = Path.Combine(ImportLibPath, Lib);
-				RequiredWin64Files.Add(FullImportLibPath);
-				PublicAdditionalLibraries.Add(FullImportLibPath);
+				string FullPath = Path.Combine(LlamaLibPath, Lib);
+				RequiredWin64Files.Add(FullPath);
+				PublicAdditionalLibraries.Add(FullPath);
 			}
 
-			foreach (string DLL in DLLs)
-			{
-				RequiredWin64Files.Add(Path.Combine(BinPath, DLL));
-				PublicDelayLoadDLLs.Add(DLL);
-				RuntimeDependencies.Add(Path.Combine(BinPath, DLL));
-			}
-
-			// Whisper
-			string WhisperImportLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Win64");
-			string WhisperImportLib = Path.Combine(WhisperImportLibPath, "whisper.lib");
-			string WhisperDll = Path.Combine(BinPath, "whisper.dll");
+			// whisper import library (whisper.dll has ggml statically linked inside)
+			string WhisperLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Win64");
+			string WhisperImportLib = Path.Combine(WhisperLibPath, "whisper.lib");
 			RequiredWin64Files.Add(WhisperImportLib);
-			RequiredWin64Files.Add(WhisperDll);
 			PublicAdditionalLibraries.Add(WhisperImportLib);
-			PublicDelayLoadDLLs.Add("whisper.dll");
-			RuntimeDependencies.Add(WhisperDll);
+
+			// Register DLLs as runtime dependencies
+			string BinPath = Path.Combine(PluginDir, "Binaries", "Win64");
+			string[] RuntimeDlls = new string[] {
+				"ggml-base.dll", "ggml-cpu.dll", "ggml.dll", "llama.dll",
+				"whisper.dll"
+			};
+			foreach (string Dll in RuntimeDlls)
+			{
+				RuntimeDependencies.Add(Path.Combine(BinPath, Dll));
+			}
 
 			RequireFiles("Win64", RequiredWin64Files);
 		}
@@ -138,7 +131,8 @@ public class LlamaCpp : ModuleRules
 		{
 			string BinPath = Path.Combine(PluginDir, "Binaries", "Mac");
 
-			string[] DyLibs = new string[] {
+			// llama dylibs (with separate ggml dylibs)
+			string[] LlamaDyLibs = new string[] {
 				"libggml-base.dylib",
 				"libggml-cpu.dylib",
 				"libggml.dylib",
@@ -147,7 +141,7 @@ public class LlamaCpp : ModuleRules
 
 			List<string> RequiredMacFiles = new List<string>();
 
-			foreach (string DyLib in DyLibs)
+			foreach (string DyLib in LlamaDyLibs)
 			{
 				string FullPath = Path.Combine(BinPath, DyLib);
 				RequiredMacFiles.Add(FullPath);
@@ -155,7 +149,7 @@ public class LlamaCpp : ModuleRules
 				RuntimeDependencies.Add(FullPath);
 			}
 
-			// Whisper
+			// whisper dylib is self-contained (ggml statically linked inside)
 			string WhisperDyLib = Path.Combine(BinPath, "libwhisper.dylib");
 			RequiredMacFiles.Add(WhisperDyLib);
 			PublicAdditionalLibraries.Add(WhisperDyLib);

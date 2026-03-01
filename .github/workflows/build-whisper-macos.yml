@@ -21,26 +21,34 @@ jobs:
           repository: ggml-org/whisper.cpp
           ref: v1.8.3
 
-      - name: Configure CMake (universal binary)
+      - name: Patch CMake to build whisper as shared with static ggml
+        run: |
+          # Force whisper target to SHARED so ggml is statically linked inside.
+          # This avoids dylib conflicts with llama.cpp's own ggml dylibs.
+          sed -i '' 's/add_library(whisper$/add_library(whisper SHARED/' src/CMakeLists.txt
+          echo 'target_compile_definitions(whisper PRIVATE WHISPER_SHARED WHISPER_BUILD)' >> src/CMakeLists.txt
+          echo "Patched src/CMakeLists.txt to force whisper SHARED with exports"
+
+      - name: Configure CMake (static ggml, shared whisper, universal binary)
         run: |
           cmake -B build \
-            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_SHARED_LIBS=OFF \
             -DGGML_NATIVE=OFF \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=OFF \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_VISIBILITY_PRESET=hidden \
+            -DCMAKE_CXX_VISIBILITY_PRESET=hidden
 
       - name: Build
-        run: cmake --build build --config Release --target whisper ggml ggml-base ggml-cpu -j $(sysctl -n hw.logicalcpu)
+        run: cmake --build build --config Release --target whisper -j $(sysctl -n hw.logicalcpu)
 
-      - name: Package dylibs
+      - name: Package dylib (self-contained, ggml statically linked)
         run: |
           mkdir -p package
+          # Only libwhisper.dylib needed - ggml is statically linked inside
           find build -name 'libwhisper.dylib' -exec cp {} package/ \;
-          find build -name 'libggml-base.dylib' -exec cp {} package/ \;
-          find build -name 'libggml-cpu.dylib' -exec cp {} package/ \;
-          find build -name 'libggml.dylib' -exec cp {} package/ \;
           ls -la package/
           cd package && zip -r ../whisper-macos-universal.zip *.dylib
 

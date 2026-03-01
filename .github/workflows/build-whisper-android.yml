@@ -27,28 +27,36 @@ jobs:
         with:
           ndk-version: r27c
 
-      - name: Configure CMake
+      - name: Patch CMake to build whisper as shared with static ggml
+        run: |
+          # Force whisper target to SHARED so ggml is statically linked inside.
+          # This avoids .so conflicts with llama.cpp's own ggml .so files.
+          sed -i 's/add_library(whisper$/add_library(whisper SHARED/' src/CMakeLists.txt
+          echo 'target_compile_definitions(whisper PRIVATE WHISPER_SHARED WHISPER_BUILD)' >> src/CMakeLists.txt
+          echo "Patched src/CMakeLists.txt to force whisper SHARED with exports"
+
+      - name: Configure CMake (static ggml, shared whisper)
         run: |
           cmake -B build \
             -DCMAKE_TOOLCHAIN_FILE=${{ steps.ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-28 \
-            -DBUILD_SHARED_LIBS=ON \
+            -DBUILD_SHARED_LIBS=OFF \
             -DGGML_NATIVE=OFF \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=OFF \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_VISIBILITY_PRESET=hidden \
+            -DCMAKE_CXX_VISIBILITY_PRESET=hidden
 
       - name: Build
-        run: cmake --build build --config Release --target whisper ggml ggml-base ggml-cpu -j $(nproc)
+        run: cmake --build build --config Release --target whisper -j $(nproc)
 
-      - name: Package shared libraries
+      - name: Package shared library (self-contained, ggml statically linked)
         run: |
           mkdir -p package
+          # Only libwhisper.so needed - ggml is statically linked inside
           find build -name 'libwhisper.so' -exec cp {} package/ \;
-          find build -name 'libggml-base.so' -exec cp {} package/ \;
-          find build -name 'libggml-cpu.so' -exec cp {} package/ \;
-          find build -name 'libggml.so' -exec cp {} package/ \;
           ls -la package/
           cd package && zip -r ../whisper-android-arm64-v8a.zip *.so
 

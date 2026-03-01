@@ -37,23 +37,25 @@ void FLlamaCppModule::StartupModule()
 #if PLATFORM_WINDOWS
 	FString BinPath = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("LlamaCpp"))->GetBaseDir(), TEXT("Binaries/Win64"));
 
-	// llama.cpp libs in dependency order
+	// llama.cpp libs in dependency order (llama uses separate ggml DLLs)
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("ggml-base.dll")));
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("ggml-cpu.dll")));
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("ggml.dll")));
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("llama.dll")));
 
-	// whisper.cpp
+	// whisper.dll is self-contained (ggml statically linked inside)
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("whisper.dll")));
 
 #elif PLATFORM_MAC
 	FString BinPath = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("LlamaCpp"))->GetBaseDir(), TEXT("Binaries/Mac"));
 
+	// llama dylibs with separate ggml dependencies
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("libggml-base.dylib")));
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("libggml-cpu.dylib")));
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("libggml.dylib")));
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("libllama.dylib")));
 
+	// libwhisper.dylib is self-contained (ggml statically linked inside)
 	LoadSharedLibrary(FPaths::Combine(BinPath, TEXT("libwhisper.dylib")));
 #endif
 
