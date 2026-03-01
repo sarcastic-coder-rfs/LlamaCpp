@@ -184,7 +184,7 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 		FMemory::Memcpy(CapturedAudioData.GetData() + OldNum, InAudio, NumSamples * sizeof(float));
 	};
 
-	if (!AudioCapture->OpenCaptureStream(Params, MoveTemp(OnCapture), 1024))
+	if (!AudioCapture->OpenCaptureAudioStream(Params, MoveTemp(OnCapture), 1024))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Whisper: Failed to open audio capture stream"));
 		return;
