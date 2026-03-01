@@ -298,6 +298,22 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	bCancelTranscription = false;
 	bIsTranscribing = true;
 
+	if (!WhisperCtx)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Whisper: Cannot transcribe - model not loaded (WhisperCtx is null)"));
+		bIsTranscribing = false;
+		return;
+	}
+
+	if (AudioData.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Whisper: Cannot transcribe - no audio data"));
+		bIsTranscribing = false;
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Whisper: RunTranscription called with %d samples, WhisperCtx=%p"), AudioData.Num(), WhisperCtx);
+
 	TWeakObjectPtr<UWhisperCppTranscription> WeakThis(this);
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* CancelFlag = &bCancelTranscription;
@@ -306,6 +322,8 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag]()
 	{
 		FWhisperTranscriptionResult Result;
+
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Background thread started, BgCtx=%p, samples=%d"), BgCtx, AudioData.Num());
 
 		whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
 		WParams.n_threads = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
@@ -323,13 +341,9 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		std::string LanguageUtf8 = TCHAR_TO_UTF8(*Language);
 		WParams.language = LanguageUtf8.c_str();
 
-		// Set up abort callback for cancellation
-		WParams.abort_callback = [](void* UserData) -> bool
-		{
-			TAtomic<bool>* Cancel = static_cast<TAtomic<bool>*>(UserData);
-			return *Cancel;
-		};
-		WParams.abort_callback_user_data = CancelFlag;
+		// Disable abort callback for now to rule out as crash source
+		WParams.abort_callback = nullptr;
+		WParams.abort_callback_user_data = nullptr;
 
 		UE_LOG(LogTemp, Log, TEXT("Whisper: Running whisper_full with %d samples (%.1fs of audio)"),
 			AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
