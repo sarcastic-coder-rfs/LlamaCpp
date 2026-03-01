@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
+#include "AudioCaptureCore.h"
 #include "WhisperCppTranscription.generated.h"
 
 struct whisper_context;
