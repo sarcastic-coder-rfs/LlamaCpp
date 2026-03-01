@@ -354,7 +354,6 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		int nVocab = whisper_n_vocab(BgCtx);
 		int nTextCtx = whisper_n_text_ctx(BgCtx);
 		int nAudioCtx = whisper_n_audio_ctx(BgCtx);
-		int nMels = whisper_n_len_from_state(whisper_get_state(BgCtx));
 		bool isMultilingual = whisper_is_multilingual(BgCtx);
 		UE_LOG(LogTemp, Log, TEXT("Whisper: Model info - vocab=%d, text_ctx=%d, audio_ctx=%d, multilingual=%d"),
 			nVocab, nTextCtx, nAudioCtx, isMultilingual ? 1 : 0);
