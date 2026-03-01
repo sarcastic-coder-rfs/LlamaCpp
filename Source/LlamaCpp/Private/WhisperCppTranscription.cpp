@@ -312,65 +312,42 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Whisper: RunTranscription called with %d samples, WhisperCtx=%p"), AudioData.Num(), WhisperCtx);
-
 	TWeakObjectPtr<UWhisperCppTranscription> WeakThis(this);
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* CancelFlag = &bCancelTranscription;
 	TAtomic<bool>* TranscribingFlag = &bIsTranscribing;
 
+	UE_LOG(LogTemp, Log, TEXT("Whisper: Starting transcription with %d samples (%.1fs)"),
+		AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
+
 	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag]()
 	{
 		FWhisperTranscriptionResult Result;
 
-		UE_LOG(LogTemp, Log, TEXT("Whisper: Background thread started, BgCtx=%p, samples=%d"), BgCtx, AudioData.Num());
-
-		// Verify DLL is functional
-		const char* SysInfo = whisper_print_system_info();
-		UE_LOG(LogTemp, Log, TEXT("Whisper: System info: %s"), UTF8_TO_TCHAR(SysInfo));
-
 		whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-		UE_LOG(LogTemp, Log, TEXT("Whisper: default_params obtained, strategy=%d, n_threads=%d"), (int)WParams.strategy, WParams.n_threads);
 		WParams.n_threads = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
 		if (WParams.n_threads > 4)
 		{
 			WParams.n_threads = 4;
 		}
-		WParams.print_progress = true;
-		WParams.print_special = true;
-		WParams.print_realtime = true;
-		WParams.print_timestamps = true;
+		WParams.print_progress = false;
+		WParams.print_special = false;
+		WParams.print_realtime = false;
+		WParams.print_timestamps = false;
 		WParams.single_segment = false;
 		WParams.no_timestamps = false;
 
 		std::string LanguageUtf8 = TCHAR_TO_UTF8(*Language);
 		WParams.language = LanguageUtf8.c_str();
 
-		// Disable abort callback for now to rule out as crash source
 		WParams.abort_callback = nullptr;
 		WParams.abort_callback_user_data = nullptr;
 
-		// Query context to verify model is valid
-		int nVocab = whisper_n_vocab(BgCtx);
-		int nTextCtx = whisper_n_text_ctx(BgCtx);
-		int nAudioCtx = whisper_n_audio_ctx(BgCtx);
-		bool isMultilingual = whisper_is_multilingual(BgCtx);
-		UE_LOG(LogTemp, Log, TEXT("Whisper: Model info - vocab=%d, text_ctx=%d, audio_ctx=%d, multilingual=%d"),
-			nVocab, nTextCtx, nAudioCtx, isMultilingual ? 1 : 0);
-
-		UE_LOG(LogTemp, Log, TEXT("Whisper: Running whisper_full with %d samples (%.1fs), data=%p, ctx=%p, n_threads=%d, lang=%s"),
-			AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE,
-			AudioData.GetData(), BgCtx, WParams.n_threads,
-			UTF8_TO_TCHAR(WParams.language ? WParams.language : "null"));
-
 		int Ret = whisper_full(BgCtx, WParams, AudioData.GetData(), AudioData.Num());
-
-		UE_LOG(LogTemp, Log, TEXT("Whisper: whisper_full returned %d"), Ret);
 
 		if (Ret == 0)
 		{
 			int NSegments = whisper_full_n_segments(BgCtx);
-			UE_LOG(LogTemp, Log, TEXT("Whisper: Got %d segments"), NSegments);
 			FString FullText;
 
 			for (int i = 0; i < NSegments; ++i)
