@@ -350,6 +350,15 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		WParams.abort_callback = nullptr;
 		WParams.abort_callback_user_data = nullptr;
 
+		// Query context to verify model is valid
+		int nVocab = whisper_n_vocab(BgCtx);
+		int nTextCtx = whisper_n_text_ctx(BgCtx);
+		int nAudioCtx = whisper_n_audio_ctx(BgCtx);
+		int nMels = whisper_n_len_from_state(whisper_get_state(BgCtx));
+		bool isMultilingual = whisper_is_multilingual(BgCtx);
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Model info - vocab=%d, text_ctx=%d, audio_ctx=%d, multilingual=%d"),
+			nVocab, nTextCtx, nAudioCtx, isMultilingual ? 1 : 0);
+
 		UE_LOG(LogTemp, Log, TEXT("Whisper: Running whisper_full with %d samples (%.1fs), data=%p, ctx=%p, n_threads=%d, lang=%s"),
 			AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE,
 			AudioData.GetData(), BgCtx, WParams.n_threads,
