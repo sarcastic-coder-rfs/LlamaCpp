@@ -5,6 +5,9 @@
 #include "AudioCaptureCore.h"
 #include "whisper.h"
 
+#include <string>
+#include <vector>
+
 UWhisperCppTranscription::UWhisperCppTranscription()
 {
 }
