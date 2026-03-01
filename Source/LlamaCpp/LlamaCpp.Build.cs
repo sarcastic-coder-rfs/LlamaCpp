@@ -33,6 +33,7 @@ public class LlamaCpp : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"Projects",
 			"AudioCapture",
 			"AudioCaptureCore",
 			"AudioMixer"
