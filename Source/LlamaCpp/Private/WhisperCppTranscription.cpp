@@ -167,12 +167,14 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 		DeviceInfo.InputChannels);
 
 	Audio::FAudioCaptureDeviceParams Params;
-	Audio::FOnAudioCaptureFunction OnCapture = [this](const float* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
+	Audio::FOnAudioCaptureFunction OnCapture = [this](const void* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
 	{
 		if (NumFrames <= 0 || InNumChannels <= 0)
 		{
 			return;
 		}
+
+		const float* AudioData = static_cast<const float*>(InAudio);
 
 		CaptureSampleRate = static_cast<float>(InSampleRate);
 		CaptureNumChannels = InNumChannels;
@@ -181,7 +183,7 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 		int32 NumSamples = NumFrames * InNumChannels;
 		int32 OldNum = CapturedAudioData.Num();
 		CapturedAudioData.SetNum(OldNum + NumSamples);
-		FMemory::Memcpy(CapturedAudioData.GetData() + OldNum, InAudio, NumSamples * sizeof(float));
+		FMemory::Memcpy(CapturedAudioData.GetData() + OldNum, AudioData, NumSamples * sizeof(float));
 	};
 
 	if (!AudioCapture->OpenCaptureAudioStream(Params, MoveTemp(OnCapture), 1024))
