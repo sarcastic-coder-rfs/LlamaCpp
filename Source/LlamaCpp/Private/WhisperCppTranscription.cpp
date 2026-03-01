@@ -324,16 +324,34 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	{
 		FWhisperTranscriptionResult Result;
 
+#if !UE_BUILD_SHIPPING
+		const char* SysInfo = whisper_print_system_info();
+		UE_LOG(LogTemp, Log, TEXT("Whisper: System info: %s"), UTF8_TO_TCHAR(SysInfo));
+
+		int nVocab = whisper_n_vocab(BgCtx);
+		int nTextCtx = whisper_n_text_ctx(BgCtx);
+		int nAudioCtx = whisper_n_audio_ctx(BgCtx);
+		bool isMultilingual = whisper_is_multilingual(BgCtx);
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Model info - vocab=%d, text_ctx=%d, audio_ctx=%d, multilingual=%d"),
+			nVocab, nTextCtx, nAudioCtx, isMultilingual ? 1 : 0);
+#endif
+
 		whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
 		WParams.n_threads = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
 		if (WParams.n_threads > 4)
 		{
 			WParams.n_threads = 4;
 		}
+#if !UE_BUILD_SHIPPING
+		WParams.print_progress = true;
+		WParams.print_realtime = true;
+		WParams.print_timestamps = true;
+#else
 		WParams.print_progress = false;
-		WParams.print_special = false;
 		WParams.print_realtime = false;
 		WParams.print_timestamps = false;
+#endif
+		WParams.print_special = false;
 		WParams.single_segment = false;
 		WParams.no_timestamps = false;
 
@@ -343,11 +361,20 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		WParams.abort_callback = nullptr;
 		WParams.abort_callback_user_data = nullptr;
 
+#if !UE_BUILD_SHIPPING
+		UE_LOG(LogTemp, Log, TEXT("Whisper: Calling whisper_full - samples=%d, data=%p, ctx=%p, n_threads=%d, lang=%s"),
+			AudioData.Num(), AudioData.GetData(), BgCtx, WParams.n_threads,
+			UTF8_TO_TCHAR(WParams.language ? WParams.language : "null"));
+#endif
+
 		int Ret = whisper_full(BgCtx, WParams, AudioData.GetData(), AudioData.Num());
+
+		UE_LOG(LogTemp, Log, TEXT("Whisper: whisper_full returned %d"), Ret);
 
 		if (Ret == 0)
 		{
 			int NSegments = whisper_full_n_segments(BgCtx);
+			UE_LOG(LogTemp, Log, TEXT("Whisper: Got %d segments"), NSegments);
 			FString FullText;
 
 			for (int i = 0; i < NSegments; ++i)
