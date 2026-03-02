@@ -9,6 +9,12 @@
 	"EnabledByDefault": true,
 	"CanContainContent": false,
 	"IsBetaVersion": true,
+	"Plugins": [
+		{
+			"Name": "AudioCapture",
+			"Enabled": true
+		}
+	],
 	"Modules": [
 		{
 			"Name": "LlamaCpp",
