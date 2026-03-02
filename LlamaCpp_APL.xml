@@ -17,6 +17,10 @@
 				  dst="$S(BuildDir)/libs/arm64-v8a/libllama.so"/>
 		<copyFile src="$S(PluginDir)/ThirdParty/whisper/lib/Android/arm64-v8a/libwhisper.so"
 				  dst="$S(BuildDir)/libs/arm64-v8a/libwhisper.so"/>
+		<copyFile src="$S(PluginDir)/ThirdParty/sherpa-onnx/lib/Android/arm64-v8a/libonnxruntime.so"
+				  dst="$S(BuildDir)/libs/arm64-v8a/libonnxruntime.so"/>
+		<copyFile src="$S(PluginDir)/ThirdParty/sherpa-onnx/lib/Android/arm64-v8a/libsherpa-onnx-c-api.so"
+				  dst="$S(BuildDir)/libs/arm64-v8a/libsherpa-onnx-c-api.so"/>
 	</resourceCopies>
 
 	<!-- Load .so files in dependency order -->
@@ -26,6 +30,8 @@
 		<loadLibrary name="ggml" failmsg="Failed to load libggml.so"/>
 		<loadLibrary name="llama" failmsg="Failed to load libllama.so"/>
 		<loadLibrary name="whisper" failmsg="Failed to load libwhisper.so"/>
+		<loadLibrary name="onnxruntime" failmsg="Failed to load libonnxruntime.so"/>
+		<loadLibrary name="sherpa-onnx-c-api" failmsg="Failed to load libsherpa-onnx-c-api.so"/>
 	</soLoadLibrary>
 
 	<!-- Permissions -->

@@ -22,3 +22,13 @@ ThirdParty/whisper/lib/**/*.so
 ThirdParty/whisper/lib/**/*.dll
 ThirdParty/whisper/lib/**/*.lib
 ThirdParty/whisper/lib/**/*.dylib
+ThirdParty/sherpa-onnx/lib/**/*.so
+ThirdParty/sherpa-onnx/lib/**/*.dll
+ThirdParty/sherpa-onnx/lib/**/*.lib
+ThirdParty/sherpa-onnx/lib/**/*.dylib
+
+# Prebuilt archives and Android artifacts (download from Releases)
+ThirdParty/llama/lib/**/*.zip
+ThirdParty/whisper/aar/
+ThirdParty/whisper/jniLibs/
+ThirdParty/whisper/metadata/

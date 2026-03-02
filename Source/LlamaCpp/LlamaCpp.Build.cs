@@ -46,8 +46,12 @@ public class LlamaCpp : ModuleRules
 		string WhisperThirdPartyPath = Path.Combine(PluginDir, "ThirdParty", "whisper");
 		string WhisperIncludePath = Path.Combine(WhisperThirdPartyPath, "include");
 
+		string SherpaThirdPartyPath = Path.Combine(PluginDir, "ThirdParty", "sherpa-onnx");
+		string SherpaIncludePath = Path.Combine(SherpaThirdPartyPath, "include");
+
 		PublicIncludePaths.Add(IncludePath);
 		PublicIncludePaths.Add(WhisperIncludePath);
+		PublicIncludePaths.Add(SherpaIncludePath);
 
 		// llama/ggml use shared libs on all platforms; whisper uses shared on all platforms
 		// (whisper.dll/dylib/so has ggml statically linked inside - no separate ggml libs for whisper)
@@ -83,6 +87,20 @@ public class LlamaCpp : ModuleRules
 			PublicAdditionalLibraries.Add(WhisperSo);
 			RuntimeDependencies.Add(WhisperSo);
 
+			// sherpa-onnx shared libraries
+			string SherpaLibPath = Path.Combine(SherpaThirdPartyPath, "lib", "Android", "arm64-v8a");
+			string[] SherpaLibs = new string[] {
+				"libonnxruntime.so",
+				"libsherpa-onnx-c-api.so"
+			};
+			foreach (string Lib in SherpaLibs)
+			{
+				string FullSherpaPath = Path.Combine(SherpaLibPath, Lib);
+				RequiredAndroidFiles.Add(FullSherpaPath);
+				PublicAdditionalLibraries.Add(FullSherpaPath);
+				RuntimeDependencies.Add(FullSherpaPath);
+			}
+
 			// Android packaging via APL
 			string APLPath = Path.Combine(ModuleDirectory, "..", "..", "LlamaCpp_APL.xml");
 			RequiredAndroidFiles.Add(APLPath);
@@ -114,6 +132,16 @@ public class LlamaCpp : ModuleRules
 			string WhisperImportLib = Path.Combine(WhisperLibPath, "whisper.lib");
 			RequiredWin64Files.Add(WhisperImportLib);
 			PublicAdditionalLibraries.Add(WhisperImportLib);
+
+			// sherpa-onnx import libraries (optional for Win64 editor testing)
+			string SherpaLibPath = Path.Combine(SherpaThirdPartyPath, "lib", "Win64");
+			if (Directory.Exists(SherpaLibPath))
+			{
+				string SherpaImportLib = Path.Combine(SherpaLibPath, "sherpa-onnx-c-api.lib");
+				string OnnxImportLib = Path.Combine(SherpaLibPath, "onnxruntime.lib");
+				if (File.Exists(SherpaImportLib)) PublicAdditionalLibraries.Add(SherpaImportLib);
+				if (File.Exists(OnnxImportLib)) PublicAdditionalLibraries.Add(OnnxImportLib);
+			}
 
 			// Register DLLs as runtime dependencies
 			string BinPath = Path.Combine(PluginDir, "Binaries", "Win64");
@@ -157,6 +185,21 @@ public class LlamaCpp : ModuleRules
 			RuntimeDependencies.Add(WhisperDyLib);
 
 			RequireFiles("Mac", RequiredMacFiles);
+
+			// sherpa-onnx dylibs (optional for Mac editor testing)
+			string[] SherpaDyLibs = new string[] {
+				"libonnxruntime.dylib",
+				"libsherpa-onnx-c-api.dylib"
+			};
+			foreach (string DyLib in SherpaDyLibs)
+			{
+				string FullPath = Path.Combine(BinPath, DyLib);
+				if (File.Exists(FullPath))
+				{
+					PublicAdditionalLibraries.Add(FullPath);
+					RuntimeDependencies.Add(FullPath);
+				}
+			}
 		}
 	}
 }

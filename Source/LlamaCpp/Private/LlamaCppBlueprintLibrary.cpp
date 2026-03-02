@@ -1,6 +1,7 @@
 #include "LlamaCppBlueprintLibrary.h"
 #include "LlamaCppInference.h"
 #include "WhisperCppTranscription.h"
+#include "SherpaOnnxTextToSpeech.h"
 
 ULlamaCppInference* ULlamaCppBlueprintLibrary::CreateLlamaCppInference(UObject* WorldContextObject)
 {
@@ -24,4 +25,16 @@ UWhisperCppTranscription* ULlamaCppBlueprintLibrary::CreateWhisperTranscription(
 
 	UWhisperCppTranscription* Transcription = NewObject<UWhisperCppTranscription>(WorldContextObject);
 	return Transcription;
+}
+
+USherpaOnnxTextToSpeech* ULlamaCppBlueprintLibrary::CreateSherpaOnnxTTS(UObject* WorldContextObject)
+{
+	if (!WorldContextObject)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SherpaOnnxTTS: CreateSherpaOnnxTTS called with null WorldContextObject"));
+		return nullptr;
+	}
+
+	USherpaOnnxTextToSpeech* Tts = NewObject<USherpaOnnxTextToSpeech>(WorldContextObject);
+	return Tts;
 }

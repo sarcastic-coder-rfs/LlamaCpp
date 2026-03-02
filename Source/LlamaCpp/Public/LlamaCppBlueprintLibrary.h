@@ -6,6 +6,7 @@
 
 class ULlamaCppInference;
 class UWhisperCppTranscription;
+class USherpaOnnxTextToSpeech;
 
 UCLASS()
 class LLAMACPP_API ULlamaCppBlueprintLibrary : public UBlueprintFunctionLibrary
@@ -18,4 +19,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Whisper", meta = (WorldContext = "WorldContextObject"))
 	static UWhisperCppTranscription* CreateWhisperTranscription(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintCallable, Category = "SherpaOnnxTTS", meta = (WorldContext = "WorldContextObject"))
+	static USherpaOnnxTextToSpeech* CreateSherpaOnnxTTS(UObject* WorldContextObject);
 };
