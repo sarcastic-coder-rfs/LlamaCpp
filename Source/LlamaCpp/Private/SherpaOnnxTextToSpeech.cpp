@@ -7,7 +7,7 @@
 #include "GameFramework/Actor.h"
 
 THIRD_PARTY_INCLUDES_START
-#include "sherpa-onnx/c-api/c-api.h"
+#include "c-api.h"
 THIRD_PARTY_INCLUDES_END
 
 USherpaOnnxTextToSpeech::USherpaOnnxTextToSpeech()
