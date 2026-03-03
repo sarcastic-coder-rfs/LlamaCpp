@@ -1,5 +1,7 @@
 #include "SherpaOnnxTextToSpeech.h"
 #include "Async/Async.h"
+
+#include <string>
 #include "Sound/SoundWaveProcedural.h"
 #include "Components/AudioComponent.h"
 #include "Engine/World.h"

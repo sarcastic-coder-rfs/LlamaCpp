@@ -147,7 +147,8 @@ public class LlamaCpp : ModuleRules
 			string BinPath = Path.Combine(PluginDir, "Binaries", "Win64");
 			string[] RuntimeDlls = new string[] {
 				"ggml-base.dll", "ggml-cpu.dll", "ggml.dll", "llama.dll",
-				"whisper.dll"
+				"whisper.dll",
+				"sherpa-onnx-c-api.dll", "onnxruntime.dll", "onnxruntime_providers_shared.dll"
 			};
 			foreach (string Dll in RuntimeDlls)
 			{
