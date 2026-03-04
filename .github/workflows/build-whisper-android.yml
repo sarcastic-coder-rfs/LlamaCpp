@@ -55,8 +55,40 @@ jobs:
       - name: Package shared library (self-contained, ggml statically linked)
         run: |
           mkdir -p package
-          # Only libwhisper.so needed - ggml is statically linked inside
-          find build -name 'libwhisper.so' -exec cp {} package/ \;
+          LLVM_NM="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          LLVM_READELF="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          CANDIDATES=$(find build -name 'libwhisper.so' | sort)
+          SELECTED=""
+
+          if [ -z "$CANDIDATES" ]; then
+            echo "No libwhisper.so candidates found under build/."
+            exit 1
+          fi
+
+          for CAND in $CANDIDATES; do
+            if "$LLVM_NM" -D "$CAND" | grep -q " T whisper_full$" && \
+               "$LLVM_NM" -D "$CAND" | grep -q " T whisper_free$" && \
+               "$LLVM_READELF" -Ws "$CAND" | grep -Eq "GLOBAL[[:space:]]+DEFAULT[[:space:]].*whisper_full$" && \
+               "$LLVM_READELF" -Ws "$CAND" | grep -Eq "GLOBAL[[:space:]]+DEFAULT[[:space:]].*whisper_free$"; then
+              SELECTED="$CAND"
+              break
+            fi
+          done
+
+          if [ -z "$SELECTED" ]; then
+            echo "No libwhisper.so with exported whisper_* C API symbols was found."
+            echo "Candidates:"
+            for CAND in $CANDIDATES; do
+              echo " - $CAND"
+              "$LLVM_NM" -D "$CAND" | head -n 20 || true
+              "$LLVM_READELF" -Ws "$CAND" | grep -E "whisper_|Java_com_whispercpp" | head -n 20 || true
+            done
+            exit 1
+          fi
+
+          cp "$SELECTED" package/libwhisper.so
+          echo "Selected whisper library: $SELECTED"
+          "$LLVM_READELF" -Ws "$SELECTED" | grep -E "whisper_full$|whisper_free$"
           ls -la package/
           cd package && zip -r ../whisper-android-arm64-v8a.zip *.so
 
