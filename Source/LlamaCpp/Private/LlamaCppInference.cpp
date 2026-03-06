@@ -2,6 +2,7 @@
 #include "Async/Async.h"
 #include "llama.h"
 #include <string>
+#include "LlamaCppLog.h"
 
 ULlamaCppInference::ULlamaCppInference()
 {
@@ -18,7 +19,7 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 {
 	if (Model)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LlamaCpp: Model already loaded, unloading first"));
+		UE_LOG(LogLlamaCpp, Warning, TEXT("LlamaCpp: Model already loaded, unloading first"));
 		UnloadModel();
 	}
 
@@ -52,7 +53,7 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 			LoadedCtx = llama_init_from_model(LoadedModel, CtxParams);
 			if (!LoadedCtx)
 			{
-				UE_LOG(LogTemp, Error, TEXT("LlamaCpp: Failed to create context"));
+				UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to create context"));
 				llama_model_free(LoadedModel);
 				LoadedModel = nullptr;
 				LoadedVocab = nullptr;
@@ -61,7 +62,7 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("LlamaCpp: Failed to load model from %s"), *PathCopy);
+			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to load model from %s"), *PathCopy);
 		}
 
 		AsyncTask(ENamedThreads::GameThread, [WeakThis, LoadedModel, LoadedCtx, LoadedVocab, bSuccess]()
@@ -73,7 +74,7 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 					Self->Model = LoadedModel;
 					Self->Ctx = LoadedCtx;
 					Self->Vocab = LoadedVocab;
-					UE_LOG(LogTemp, Log, TEXT("LlamaCpp: Model loaded successfully"));
+					UE_LOG(LogLlamaCpp, Log, TEXT("LlamaCpp: Model loaded successfully"));
 				}
 				Self->OnModelLoaded.Broadcast(bSuccess);
 			}
@@ -111,14 +112,14 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 {
 	if (!IsModelLoaded())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LlamaCpp: Cannot generate — no model loaded"));
+		UE_LOG(LogLlamaCpp, Warning, TEXT("LlamaCpp: Cannot generate — no model loaded"));
 		OnGenerationComplete.Broadcast(TEXT(""));
 		return;
 	}
 
 	if (bIsGenerating)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LlamaCpp: Generation already in progress"));
+		UE_LOG(LogLlamaCpp, Warning, TEXT("LlamaCpp: Generation already in progress"));
 		return;
 	}
 
@@ -136,7 +137,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 	TAtomic<bool>* GeneratingFlag = &bIsGenerating;
 
 	Async(EAsyncExecution::Thread, [WeakThis, PromptCopy, MaxTokens, SamplingParams,
-									BgCtx, BgVocab, CancelFlag, GeneratingFlag]()
+							BgCtx, BgVocab, CancelFlag, GeneratingFlag]()
 	{
 		FString FullResult;
 
@@ -150,7 +151,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 
 		if (NPromptTokens <= 0)
 		{
-			UE_LOG(LogTemp, Error, TEXT("LlamaCpp: Failed to tokenize prompt"));
+			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to tokenize prompt"));
 			*GeneratingFlag = false;
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
 			{
@@ -185,7 +186,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 		llama_batch Batch = llama_batch_get_one(PromptTokens.GetData(), PromptTokens.Num());
 		if (llama_decode(BgCtx, Batch) != 0)
 		{
-			UE_LOG(LogTemp, Error, TEXT("LlamaCpp: Failed to decode prompt"));
+			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to decode prompt"));
 			llama_sampler_free(Sampler);
 			*GeneratingFlag = false;
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
@@ -233,7 +234,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 			Batch = llama_batch_get_one(&NewToken, 1);
 			if (llama_decode(BgCtx, Batch) != 0)
 			{
-				UE_LOG(LogTemp, Error, TEXT("LlamaCpp: Decode failed at token %d"), i);
+				UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Decode failed at token %d"), i);
 				break;
 			}
 		}

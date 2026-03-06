@@ -2,12 +2,13 @@
 #include "LlamaCppInference.h"
 #include "WhisperCppTranscription.h"
 #include "SherpaOnnxTextToSpeech.h"
+#include "LlamaCppLog.h"
 
 ULlamaCppInference* ULlamaCppBlueprintLibrary::CreateLlamaCppInference(UObject* WorldContextObject)
 {
 	if (!WorldContextObject)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LlamaCpp: CreateLlamaCppInference called with null WorldContextObject"));
+		UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: CreateLlamaCppInference called with null WorldContextObject"));
 		return nullptr;
 	}
 
@@ -19,7 +20,7 @@ UWhisperCppTranscription* ULlamaCppBlueprintLibrary::CreateWhisperTranscription(
 {
 	if (!WorldContextObject)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Whisper: CreateWhisperTranscription called with null WorldContextObject"));
+		UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: CreateWhisperTranscription called with null WorldContextObject"));
 		return nullptr;
 	}
 
@@ -31,7 +32,7 @@ USherpaOnnxTextToSpeech* ULlamaCppBlueprintLibrary::CreateSherpaOnnxTTS(UObject*
 {
 	if (!WorldContextObject)
 	{
-		UE_LOG(LogTemp, Error, TEXT("SherpaOnnxTTS: CreateSherpaOnnxTTS called with null WorldContextObject"));
+		UE_LOG(LogSherpaOnnxTTS, Error, TEXT("SherpaOnnxTTS: CreateSherpaOnnxTTS called with null WorldContextObject"));
 		return nullptr;
 	}
 

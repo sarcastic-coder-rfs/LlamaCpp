@@ -3,6 +3,11 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformProcess.h"
 #include "llama.h"
+#include "LlamaCppLog.h"
+
+DEFINE_LOG_CATEGORY(LogLlamaCpp);
+DEFINE_LOG_CATEGORY(LogWhisperCpp);
+DEFINE_LOG_CATEGORY(LogSherpaOnnxTTS);
 
 #define LOCTEXT_NAMESPACE "FLlamaCppModule"
 
@@ -11,10 +16,10 @@ bool FLlamaCppModule::LoadSharedLibrary(const FString& LibName)
 	void* Handle = FPlatformProcess::GetDllHandle(*LibName);
 	if (!Handle)
 	{
-		UE_LOG(LogTemp, Error, TEXT("LlamaCpp: Failed to load shared library: %s"), *LibName);
+		UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to load shared library: %s"), *LibName);
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("LlamaCpp: Loaded %s"), *LibName);
+	UE_LOG(LogLlamaCpp, Log, TEXT("LlamaCpp: Loaded %s"), *LibName);
 	LoadedLibHandles.Add(Handle);
 	return true;
 }
@@ -62,13 +67,13 @@ void FLlamaCppModule::StartupModule()
 	// Android loads .so via System.loadLibrary in APL — no manual loading needed
 
 	llama_backend_init();
-	UE_LOG(LogTemp, Log, TEXT("LlamaCpp: backend initialized"));
+	UE_LOG(LogLlamaCpp, Log, TEXT("LlamaCpp: backend initialized"));
 }
 
 void FLlamaCppModule::ShutdownModule()
 {
 	llama_backend_free();
-	UE_LOG(LogTemp, Log, TEXT("LlamaCpp: backend freed"));
+	UE_LOG(LogLlamaCpp, Log, TEXT("LlamaCpp: backend freed"));
 
 	FreeLoadedLibraries();
 }
