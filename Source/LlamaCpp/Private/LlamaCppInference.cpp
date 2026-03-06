@@ -3,6 +3,16 @@
 #include "llama.h"
 #include <string>
 #include "LlamaCppLog.h"
+#include "Misc/Guid.h"
+#include "HAL/PlatformTime.h"
+
+namespace
+{
+	static FString MakeOpTag(const TCHAR* Prefix, const FGuid& Id)
+	{
+		return FString::Printf(TEXT("[%s %s]"), Prefix, *Id.ToString(EGuidFormats::DigitsWithHyphens));
+	}
+}
 
 ULlamaCppInference::ULlamaCppInference()
 {
@@ -17,9 +27,13 @@ void ULlamaCppInference::BeginDestroy()
 
 void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 {
+	FGuid LoadRunId = FGuid::NewGuid();
+	const FString LoadTag = MakeOpTag(TEXT("Load"), LoadRunId);
+	const double LoadStartTime = FPlatformTime::Seconds();
+	UE_LOG(LogLlamaCpp, Log, TEXT("%s Requested model load (path=%s, ctx=%d)"), *LoadTag, *ModelPath, ContextSize);
 	if (Model)
 	{
-		UE_LOG(LogLlamaCpp, Warning, TEXT("LlamaCpp: Model already loaded, unloading first"));
+		UE_LOG(LogLlamaCpp, Warning, TEXT("%s Model already loaded, unloading first"), *LoadTag);
 		UnloadModel();
 	}
 
@@ -29,7 +43,7 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 	TWeakObjectPtr<ULlamaCppInference> WeakThis(this);
 	FString PathCopy = ModelPath;
 
-	Async(EAsyncExecution::Thread, [WeakThis, PathCopy, ContextSize]()
+	Async(EAsyncExecution::Thread, [WeakThis, PathCopy, ContextSize, LoadTag, LoadStartTime]()
 	{
 		llama_model_params ModelParams = llama_model_default_params();
 		ModelParams.n_gpu_layers = 0; // CPU-only on Quest 3
@@ -62,10 +76,11 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 		}
 		else
 		{
-			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to load model from %s"), *PathCopy);
+			UE_LOG(LogLlamaCpp, Error, TEXT("%s Failed to load model from %s"), *LoadTag, *PathCopy);
 		}
 
-		AsyncTask(ENamedThreads::GameThread, [WeakThis, LoadedModel, LoadedCtx, LoadedVocab, bSuccess]()
+		const double LoadDuration = FPlatformTime::Seconds() - LoadStartTime;
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, LoadedModel, LoadedCtx, LoadedVocab, bSuccess, LoadTag, LoadDuration, ContextSize]()
 		{
 			if (ULlamaCppInference* Self = WeakThis.Get())
 			{
@@ -74,7 +89,7 @@ void ULlamaCppInference::LoadModel(const FString& ModelPath, int32 ContextSize)
 					Self->Model = LoadedModel;
 					Self->Ctx = LoadedCtx;
 					Self->Vocab = LoadedVocab;
-					UE_LOG(LogLlamaCpp, Log, TEXT("LlamaCpp: Model loaded successfully"));
+					UE_LOG(LogLlamaCpp, Log, TEXT("%s Model loaded in %.2fs (ctx=%d)"), *LoadTag, LoadDuration, ContextSize);
 				}
 				Self->OnModelLoaded.Broadcast(bSuccess);
 			}
@@ -123,6 +138,12 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 		return;
 	}
 
+	FGuid GenerationRunId = FGuid::NewGuid();
+	const FString GenerationTag = MakeOpTag(TEXT("Gen"), GenerationRunId);
+	const double GenerationStartTime = FPlatformTime::Seconds();
+	UE_LOG(LogLlamaCpp, Log, TEXT("%s Starting generation (prompt=%d chars, maxTokens=%d, temp=%.2f, topK=%d, topP=%.2f, minP=%.2f, repeatPenalty=%.2f)"),
+		*GenerationTag, Prompt.Len(), MaxTokens, SamplingParams.Temperature, SamplingParams.TopK, SamplingParams.TopP, SamplingParams.MinP, SamplingParams.RepeatPenalty);
+
 	bCancelGeneration = false;
 	bIsGenerating = true;
 
@@ -137,9 +158,10 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 	TAtomic<bool>* GeneratingFlag = &bIsGenerating;
 
 	Async(EAsyncExecution::Thread, [WeakThis, PromptCopy, MaxTokens, SamplingParams,
-							BgCtx, BgVocab, CancelFlag, GeneratingFlag]()
+							BgCtx, BgVocab, CancelFlag, GeneratingFlag, GenerationTag, GenerationStartTime]()
 	{
 		FString FullResult;
+		int32 TokensGenerated = 0;
 
 		// --- Clear KV cache ---
 		llama_memory_clear(llama_get_memory(BgCtx), true);
@@ -151,7 +173,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 
 		if (NPromptTokens <= 0)
 		{
-			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to tokenize prompt"));
+			UE_LOG(LogLlamaCpp, Error, TEXT("%s Failed to tokenize prompt"), *GenerationTag);
 			*GeneratingFlag = false;
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
 			{
@@ -186,7 +208,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 		llama_batch Batch = llama_batch_get_one(PromptTokens.GetData(), PromptTokens.Num());
 		if (llama_decode(BgCtx, Batch) != 0)
 		{
-			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to decode prompt"));
+			UE_LOG(LogLlamaCpp, Error, TEXT("%s Failed to decode prompt"), *GenerationTag);
 			llama_sampler_free(Sampler);
 			*GeneratingFlag = false;
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
@@ -222,6 +244,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 
 			FString TokenStr = UTF8_TO_TCHAR(std::string(Buf, Len).c_str());
 			FullResult += TokenStr;
+			++TokensGenerated;
 
 			// Stream token to game thread
 			AsyncTask(ENamedThreads::GameThread, [WeakThis, TokenStr]()
@@ -234,11 +257,14 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 			Batch = llama_batch_get_one(&NewToken, 1);
 			if (llama_decode(BgCtx, Batch) != 0)
 			{
-				UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Decode failed at token %d"), i);
+				UE_LOG(LogLlamaCpp, Error, TEXT("%s Decode failed at token %d"), *GenerationTag, i);
 				break;
 			}
 		}
 
+		const double GenerationDuration = FPlatformTime::Seconds() - GenerationStartTime;
+		const bool bWasCancelled = *CancelFlag;
+		UE_LOG(LogLlamaCpp, Log, TEXT("%s Generation finished in %.2fs (tokens=%d, cancelled=%s)"), *GenerationTag, GenerationDuration, TokensGenerated, bWasCancelled ? TEXT("true") : TEXT("false"));
 		llama_sampler_free(Sampler);
 		*GeneratingFlag = false;
 
@@ -253,5 +279,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 
 void ULlamaCppInference::StopGeneration()
 {
+	const bool bWasGenerating = bIsGenerating;
+	UE_LOG(LogLlamaCpp, Log, TEXT("LlamaCpp: StopGeneration invoked (wasGenerating=%s)"), bWasGenerating ? TEXT("true") : TEXT("false"));
 	bCancelGeneration = true;
 }
