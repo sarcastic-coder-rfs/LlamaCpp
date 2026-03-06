@@ -1,6 +1,8 @@
 #include "SherpaOnnxTextToSpeech.h"
 #include "Async/Async.h"
 
+#include "LlamaCppLog.h"
+
 #include <string>
 #include "Sound/SoundWaveProcedural.h"
 #include "Components/AudioComponent.h"
@@ -28,7 +30,7 @@ void USherpaOnnxTextToSpeech::LoadModel(const FString& ModelPath, const FString&
 {
 	if (TtsEngine)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SherpaOnnxTTS: Model already loaded, unloading first"));
+		UE_LOG(LogSherpaOnnxTTS, Warning, TEXT("SherpaOnnxTTS: Model already loaded, unloading first"));
 		UnloadModel();
 	}
 
@@ -58,7 +60,7 @@ void USherpaOnnxTextToSpeech::LoadModel(const FString& ModelPath, const FString&
 
 		if (!bSuccess)
 		{
-			UE_LOG(LogTemp, Error, TEXT("SherpaOnnxTTS: Failed to load model from %s"), *ModelPathCopy);
+			UE_LOG(LogSherpaOnnxTTS, Error, TEXT("SherpaOnnxTTS: Failed to load model from %s"), *ModelPathCopy);
 		}
 
 		AsyncTask(ENamedThreads::GameThread, [WeakThis, LoadedTts, bSuccess]()
@@ -68,7 +70,7 @@ void USherpaOnnxTextToSpeech::LoadModel(const FString& ModelPath, const FString&
 				if (bSuccess)
 				{
 					Self->TtsEngine = const_cast<SherpaOnnxOfflineTts*>(LoadedTts);
-					UE_LOG(LogTemp, Log, TEXT("SherpaOnnxTTS: Model loaded successfully"));
+					UE_LOG(LogSherpaOnnxTTS, Log, TEXT("SherpaOnnxTTS: Model loaded successfully"));
 				}
 				Self->OnModelLoaded.Broadcast(bSuccess);
 			}
@@ -98,14 +100,14 @@ void USherpaOnnxTextToSpeech::Speak(const FString& Text, int32 SpeakerId, float 
 {
 	if (!IsModelLoaded())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SherpaOnnxTTS: Cannot speak — no model loaded"));
+		UE_LOG(LogSherpaOnnxTTS, Warning, TEXT("SherpaOnnxTTS: Cannot speak — no model loaded"));
 		OnSpeakError.Broadcast(TEXT("No model loaded"));
 		return;
 	}
 
 	if (bIsSpeaking)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SherpaOnnxTTS: Already speaking"));
+		UE_LOG(LogSherpaOnnxTTS, Warning, TEXT("SherpaOnnxTTS: Already speaking"));
 		OnSpeakError.Broadcast(TEXT("Already speaking"));
 		return;
 	}
@@ -126,7 +128,7 @@ void USherpaOnnxTextToSpeech::Speak(const FString& Text, int32 SpeakerId, float 
 
 		if (!Audio || Audio->n <= 0)
 		{
-			UE_LOG(LogTemp, Error, TEXT("SherpaOnnxTTS: Failed to generate speech"));
+			UE_LOG(LogSherpaOnnxTTS, Error, TEXT("SherpaOnnxTTS: Failed to generate speech"));
 
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
 			{
@@ -160,7 +162,7 @@ void USherpaOnnxTextToSpeech::Speak(const FString& Text, int32 SpeakerId, float 
 
 		SherpaOnnxDestroyOfflineTtsGeneratedAudio(Audio);
 
-		UE_LOG(LogTemp, Log, TEXT("SherpaOnnxTTS: Generated %d samples at %d Hz (%.1fs)"),
+		UE_LOG(LogSherpaOnnxTTS, Log, TEXT("SherpaOnnxTTS: Generated %d samples at %d Hz (%.1fs)"),
 			NumSamples, SampleRate, static_cast<float>(NumSamples) / SampleRate);
 
 		AsyncTask(ENamedThreads::GameThread, [WeakThis, PcmBytes = MoveTemp(PcmBytes), SampleRate, NumSamples]()
@@ -192,7 +194,7 @@ void USherpaOnnxTextToSpeech::Speak(const FString& Text, int32 SpeakerId, float 
 			UWorld* World = Self->GetWorld();
 			if (!World)
 			{
-				UE_LOG(LogTemp, Error, TEXT("SherpaOnnxTTS: No world available for audio playback"));
+				UE_LOG(LogSherpaOnnxTTS, Error, TEXT("SherpaOnnxTTS: No world available for audio playback"));
 				Self->bIsSpeaking = false;
 				Self->OnSpeakError.Broadcast(TEXT("No world available for audio playback"));
 				return;
@@ -205,7 +207,7 @@ void USherpaOnnxTextToSpeech::Speak(const FString& Text, int32 SpeakerId, float 
 			Self->AudioComp->RegisterComponentWithWorld(World);
 			Self->AudioComp->Play();
 
-			UE_LOG(LogTemp, Log, TEXT("SherpaOnnxTTS: Playback started"));
+			UE_LOG(LogSherpaOnnxTTS, Log, TEXT("SherpaOnnxTTS: Playback started"));
 
 			// Monitor playback completion
 			World->GetTimerManager().SetTimer(
@@ -251,7 +253,7 @@ void USherpaOnnxTextToSpeech::MonitorPlayback()
 		CleanupAudio();
 		bIsSpeaking = false;
 
-		UE_LOG(LogTemp, Log, TEXT("SherpaOnnxTTS: Playback complete"));
+		UE_LOG(LogSherpaOnnxTTS, Log, TEXT("SherpaOnnxTTS: Playback complete"));
 		OnSpeakComplete.Broadcast();
 	}
 }
