@@ -1,6 +1,7 @@
 using UnrealBuildTool;
 using System.IO;
 using System.Collections.Generic;
+using System;
 
 public class LlamaCpp : ModuleRules
 {
@@ -80,12 +81,21 @@ public class LlamaCpp : ModuleRules
 				RuntimeDependencies.Add(FullPath);
 			}
 
-			// whisper.so is self-contained (ggml statically linked inside)
 			string WhisperLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Android", "arm64-v8a");
 			string WhisperSo = Path.Combine(WhisperLibPath, "libwhisper.so");
+			string OmpSo = Path.Combine(WhisperLibPath, "libomp.so");
+
+			RequiredAndroidFiles.Add(OmpSo);
+			PublicAdditionalLibraries.Add(OmpSo);
+			RuntimeDependencies.Add(OmpSo);
+
 			RequiredAndroidFiles.Add(WhisperSo);
+			PublicSystemLibraryPaths.Add(WhisperLibPath);
+			PublicAdditionalLibraries.Add("whisper");
 			PublicAdditionalLibraries.Add(WhisperSo);
 			RuntimeDependencies.Add(WhisperSo);
+			Console.WriteLine($"[LlamaCpp][Android] Whisper lib dir: {WhisperLibPath}");
+			Console.WriteLine($"[LlamaCpp][Android] Whisper so exists: {File.Exists(WhisperSo)} ({WhisperSo})");
 
 			// sherpa-onnx shared libraries
 			string SherpaLibPath = Path.Combine(SherpaThirdPartyPath, "lib", "Android", "arm64-v8a");
