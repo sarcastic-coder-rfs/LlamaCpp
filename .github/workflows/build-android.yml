@@ -29,6 +29,7 @@ jobs:
             -DANDROID_PLATFORM=android-28 \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
             -DCMAKE_BUILD_TYPE=Release
 
       - name: Build

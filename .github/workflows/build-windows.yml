@@ -19,7 +19,7 @@ jobs:
           ref: ${{ env.LLAMA_CPP_TAG }}
 
       - name: Configure CMake
-        run: cmake -B build -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF
+        run: cmake -B build -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF
 
       - name: Build
         run: cmake --build build --config Release
