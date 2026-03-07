@@ -43,6 +43,7 @@ jobs:
             -DANDROID_PLATFORM=android-28 \
             -DBUILD_SHARED_LIBS=OFF \
             -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=OFF \
             -DCMAKE_BUILD_TYPE=Release \

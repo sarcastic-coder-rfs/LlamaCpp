@@ -1,0 +1,88 @@
+name: Download sherpa-onnx binaries
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  SHERPA_VERSION: "1.12.28"
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Android binaries
+        run: |
+          curl -L -o sherpa-android.tar.bz2 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/sherpa-onnx-v${SHERPA_VERSION}-android.tar.bz2"
+          mkdir -p android-extract
+          tar xjf sherpa-android.tar.bz2 -C android-extract
+          mkdir -p android-out
+          find android-extract -path "*/jniLibs/arm64-v8a/*.so" -exec cp {} android-out/ \;
+          echo "=== Android arm64-v8a libraries ==="
+          ls -la android-out/
+
+      - name: Download Windows binaries
+        run: |
+          curl -L -o sherpa-win.tar.bz2 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/sherpa-onnx-v${SHERPA_VERSION}-win-x64-shared.tar.bz2"
+          mkdir -p win-extract
+          tar xjf sherpa-win.tar.bz2 -C win-extract
+          mkdir -p win-out
+          find win-extract -name "sherpa-onnx-c-api.dll" -exec cp {} win-out/ \;
+          find win-extract -name "sherpa-onnx-c-api.lib" -exec cp {} win-out/ \;
+          find win-extract -name "onnxruntime.dll" -exec cp {} win-out/ \;
+          find win-extract -name "onnxruntime_providers_shared.dll" -exec cp {} win-out/ \;
+          echo "=== Windows x64 libraries ==="
+          ls -la win-out/
+
+      - name: Download macOS binaries
+        run: |
+          curl -L -o sherpa-mac.tar.bz2 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/sherpa-onnx-v${SHERPA_VERSION}-osx-universal2-shared.tar.bz2"
+          mkdir -p mac-extract
+          tar xjf sherpa-mac.tar.bz2 -C mac-extract
+          mkdir -p mac-out
+          find mac-extract -name "libsherpa-onnx-c-api.dylib" -exec cp {} mac-out/ \;
+          find mac-extract -name "libonnxruntime.dylib" -exec cp {} mac-out/ \;
+          echo "=== macOS universal libraries ==="
+          ls -la mac-out/
+
+      - name: Download C API header
+        run: |
+          mkdir -p header-out
+          curl -L -o header-out/c-api.h \
+            "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/refs/heads/master/sherpa-onnx/c-api/c-api.h"
+          echo "=== Header file ==="
+          head -5 header-out/c-api.h
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-android-arm64-v8a
+          path: android-out/
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-windows-x64
+          path: win-out/
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-macos
+          path: mac-out/
+
+      - name: Upload header artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-header
+          path: header-out/

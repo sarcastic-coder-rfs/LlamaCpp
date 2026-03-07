@@ -2,6 +2,12 @@ name: Package All Platforms
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build-android:
@@ -22,9 +28,19 @@ jobs:
   build-whisper-windows:
     uses: ./.github/workflows/build-whisper-windows.yml
 
+  download-sherpa-onnx:
+    uses: ./.github/workflows/download-sherpa-onnx.yml
+
   package:
     runs-on: ubuntu-latest
-    needs: [build-android, build-macos, build-windows, build-whisper-android, build-whisper-macos, build-whisper-windows]
+    needs:
+      - build-android
+      - build-macos
+      - build-windows
+      - build-whisper-android
+      - build-whisper-macos
+      - build-whisper-windows
+      - download-sherpa-onnx
 
     steps:
       - name: Checkout plugin repo
@@ -66,12 +82,39 @@ jobs:
           name: whisper-windows-x64
           path: /tmp/artifacts
 
+      - name: Download Sherpa-ONNX Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sherpa-onnx-android-arm64-v8a
+          path: /tmp/sherpa-onnx/android
+
+      - name: Download Sherpa-ONNX Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sherpa-onnx-windows-x64
+          path: /tmp/sherpa-onnx/windows
+
+      - name: Download Sherpa-ONNX macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sherpa-onnx-macos
+          path: /tmp/sherpa-onnx/macos
+
+      - name: Download Sherpa-ONNX header artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sherpa-onnx-header
+          path: /tmp/sherpa-onnx/header
+
       - name: Assemble complete plugin
         run: |
           mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Android/arm64-v8a
           mkdir -p staging/LlamaCpp/ThirdParty/llama/lib/Win64
           mkdir -p staging/LlamaCpp/ThirdParty/whisper/lib/Android/arm64-v8a
           mkdir -p staging/LlamaCpp/ThirdParty/whisper/lib/Win64
+          mkdir -p staging/LlamaCpp/ThirdParty/sherpa-onnx/lib/Android/arm64-v8a
+          mkdir -p staging/LlamaCpp/ThirdParty/sherpa-onnx/lib/Win64
+          mkdir -p staging/LlamaCpp/ThirdParty/sherpa-onnx/include
           mkdir -p staging/LlamaCpp/Binaries/Win64
           mkdir -p staging/LlamaCpp/Binaries/Mac
 
@@ -99,16 +142,45 @@ jobs:
           unzip /tmp/artifacts/llama-cpp-macos-universal.zip -d staging/LlamaCpp/Binaries/Mac
           unzip /tmp/artifacts/whisper-macos-universal.zip -d staging/LlamaCpp/Binaries/Mac
 
+          # Sherpa-ONNX: Android .so files
+          cp /tmp/sherpa-onnx/android/*.so staging/LlamaCpp/ThirdParty/sherpa-onnx/lib/Android/arm64-v8a/
+
+          # Sherpa-ONNX: Windows .lib → ThirdParty, .dll → Binaries
+          cp /tmp/sherpa-onnx/windows/*.lib staging/LlamaCpp/ThirdParty/sherpa-onnx/lib/Win64/
+          cp /tmp/sherpa-onnx/windows/*.dll staging/LlamaCpp/Binaries/Win64/
+
+          # Sherpa-ONNX: macOS dylibs
+          cp /tmp/sherpa-onnx/macos/*.dylib staging/LlamaCpp/Binaries/Mac/
+
+          # Sherpa-ONNX: C API header
+          cp /tmp/sherpa-onnx/header/c-api.h staging/LlamaCpp/ThirdParty/sherpa-onnx/include/
+
           echo "=== Final layout ==="
           find staging -type f | sort
+
+      - name: Determine zip name
+        id: zipname
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "name=LlamaCpp-${TAG}-Plugin.zip" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=LlamaCpp-plugin.zip" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create plugin zip
         run: |
           cd staging
-          zip -r ../LlamaCpp-plugin.zip LlamaCpp/
+          zip -r ../${{ steps.zipname.outputs.name }} LlamaCpp/
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
           name: LlamaCpp-plugin
-          path: LlamaCpp-plugin.zip
+          path: ${{ steps.zipname.outputs.name }}
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.zipname.outputs.name }}
