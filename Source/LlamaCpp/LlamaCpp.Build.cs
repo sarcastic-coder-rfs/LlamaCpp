@@ -83,11 +83,6 @@ public class LlamaCpp : ModuleRules
 
 			string WhisperLibPath = Path.Combine(WhisperThirdPartyPath, "lib", "Android", "arm64-v8a");
 			string WhisperSo = Path.Combine(WhisperLibPath, "libwhisper.so");
-			string OmpSo = Path.Combine(WhisperLibPath, "libomp.so");
-
-			RequiredAndroidFiles.Add(OmpSo);
-			PublicAdditionalLibraries.Add(OmpSo);
-			RuntimeDependencies.Add(OmpSo);
 
 			RequiredAndroidFiles.Add(WhisperSo);
 			PublicSystemLibraryPaths.Add(WhisperLibPath);
