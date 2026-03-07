@@ -25,14 +25,15 @@ jobs:
           mkdir -p android-extract
           tar xjf sherpa-android.tar.bz2 -C android-extract
           mkdir -p android-out
-          find android-extract -path "*/jniLibs/arm64-v8a/*.so" -exec cp {} android-out/ \;
+          find android-extract -path "*/jniLibs/arm64-v8a/libsherpa-onnx-c-api.so" -exec cp {} android-out/ \;
+          find android-extract -path "*/jniLibs/arm64-v8a/libonnxruntime.so" -exec cp {} android-out/ \;
           echo "=== Android arm64-v8a libraries ==="
           ls -la android-out/
 
       - name: Download Windows binaries
         run: |
           curl -L -o sherpa-win.tar.bz2 \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/sherpa-onnx-v${SHERPA_VERSION}-win-x64-shared.tar.bz2"
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/sherpa-onnx-v${SHERPA_VERSION}-win-x64-shared-MD-Release.tar.bz2"
           mkdir -p win-extract
           tar xjf sherpa-win.tar.bz2 -C win-extract
           mkdir -p win-out
