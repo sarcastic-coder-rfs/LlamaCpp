@@ -466,4 +466,414 @@ void UWhisperCppTranscription::StartRealtimeTranscription(const FString& Languag
 
 	float ClampedInterval = FMath::Max(IntervalSeconds, 0.5f);
 
-	ew of times more replace ensures file updated entire content with new logging - we already replaced entire file. Need ensure more `LogWhisperCpp` occurrences? After rewriting entire file? maybe safe but need confirm with `grep -n LogWhisperCpp` now. but first update `Sherpa` and `Blueprint` as well? To expedite, we replaced entire file (Large). Need ensure watchers? We replaced to `LogWhisperCpp` but also there might still be `LogWhisperCpp`? Need check entire file, but due to length there might be leftover. We'll run `grep -n LogWhisperCpp` later after other updates to ensure zero occurrences. Probably there still? we replaced but need confirm later. Continue editing `SherpaOnnxTTS`. Need include header and replace logs with `LogSherpaOnnxTTS`. Add include near top. Use same approach. We'll need to rewrite file? but can use find/replace manually? probably expedite by editing entire file? For brevity we can use `python` to replace `LogWhisperCpp` occurrences with relevant category? but there might be tagline? All `Sherpa..` should use `LogSherpaOnnxTTS`. Could use `perl -0pi -e 's/LogWhisperCpp/LogSherpaOnnxTTS/g' file`? but also other file names? but hooking blueprint file includes logs for multiple categories, need manual. For `Sherpa...`, simple global replace to `LogSherpaOnnxTTS`. We'll run e.g., `python - <<` to replace? Could use `apply_patch`. We'll use `python` to do simple string replacement? maybe not best. We'll use `perl -0pi -e 's/LogWhisperCpp/LogSherpaOnnxTTS/g'`. Need check there are no other `LogWhisperCpp` references in file? we want all to change. Do same for `LlamaCppInference`? already replaced manually so none remain? need confirm later. For `Sherpa` we can run substitution. But also need to include header. We'll add `#include 
+	RealtimeTranscriptionLoop(Language, ClampedInterval);
+
+	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Realtime transcription started (interval=%.1fs)"), ClampedInterval);
+}
+
+void UWhisperCppTranscription::StopRealtimeTranscription()
+{
+	if (!bIsRealtimeTranscribing)
+	{
+		UE_LOG(LogWhisperCpp, Warning, TEXT("Whisper: Not in realtime transcription mode"));
+		return;
+	}
+
+	bIsRealtimeTranscribing = false;
+	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Stopping realtime transcription..."));
+
+	// Stop microphone
+	if (bIsCapturing && AudioCapture)
+	{
+		AudioCapture->StopStream();
+		AudioCapture->CloseStream();
+		bIsCapturing = false;
+	}
+
+	// Fire OnTranscriptionComplete with accumulated text
+	FWhisperTranscriptionResult FinalResult;
+	FinalResult.FullText = AccumulatedTranscription;
+	FinalResult.bSuccess = true;
+	OnTranscriptionComplete.Broadcast(FinalResult);
+
+	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Realtime transcription stopped. Final text: %s"), *AccumulatedTranscription);
+}
+
+bool UWhisperCppTranscription::IsRealtimeTranscribing() const
+{
+	return bIsRealtimeTranscribing;
+}
+
+void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float IntervalSeconds)
+{
+	TWeakObjectPtr<UWhisperCppTranscription> WeakThis(this);
+	whisper_context* BgCtx = WhisperCtx;
+	TAtomic<bool>* RealtimeFlag = &bIsRealtimeTranscribing;
+
+	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag]()
+	{
+		const int32 MaxWindowSamples = 30 * WHISPER_SAMPLE_RATE; // 30 seconds at 16kHz = 480000
+
+		while (*RealtimeFlag)
+		{
+			FPlatformProcess::Sleep(IntervalSeconds);
+
+			if (!*RealtimeFlag)
+			{
+				break;
+			}
+
+			// Copy current audio buffer under lock
+			TArray<float> AudioSnapshot;
+			float SrcSampleRate = 0.0f;
+			int32 SrcNumChannels = 0;
+			bool bGotAudio = false;
+
+			if (UWhisperCppTranscription* Self = WeakThis.Get())
+			{
+				{
+					FScopeLock Lock(&Self->CapturedAudioLock);
+					AudioSnapshot = Self->CapturedAudioData;
+					SrcSampleRate = Self->CaptureSampleRate;
+					SrcNumChannels = Self->CaptureNumChannels;
+				}
+				bGotAudio = AudioSnapshot.Num() > 0;
+			}
+			else
+			{
+				break;
+			}
+
+			if (!bGotAudio || SrcSampleRate <= 0.0f || SrcNumChannels <= 0)
+			{
+				UE_LOG(LogWhisperCpp, Verbose, TEXT("Whisper: Realtime loop — no audio yet (samples=%d, rate=%.0f, ch=%d)"),
+					AudioSnapshot.Num(), SrcSampleRate, SrcNumChannels);
+				continue;
+			}
+
+			UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Realtime loop — processing %d samples (rate=%.0f, ch=%d)"),
+				AudioSnapshot.Num(), SrcSampleRate, SrcNumChannels);
+
+			// Resample to 16kHz mono
+			TArray<float> ResampledData;
+			int32 IntSampleRate = static_cast<int32>(SrcSampleRate);
+
+			if (IntSampleRate != WHISPER_SAMPLE_RATE || SrcNumChannels != 1)
+			{
+				// Inline resampling (can't call member function from background thread safely)
+				// Downmix to mono
+				TArray<float> MonoData;
+				int32 NumFrames = AudioSnapshot.Num() / SrcNumChannels;
+
+				if (SrcNumChannels > 1)
+				{
+					MonoData.SetNum(NumFrames);
+					for (int32 i = 0; i < NumFrames; ++i)
+					{
+						float Sum = 0.0f;
+						for (int32 c = 0; c < SrcNumChannels; ++c)
+						{
+							Sum += AudioSnapshot[i * SrcNumChannels + c];
+						}
+						MonoData[i] = Sum / static_cast<float>(SrcNumChannels);
+					}
+				}
+				else
+				{
+					MonoData = MoveTemp(AudioSnapshot);
+				}
+
+				// Resample
+				if (IntSampleRate == WHISPER_SAMPLE_RATE)
+				{
+					ResampledData = MoveTemp(MonoData);
+				}
+				else
+				{
+					double Ratio = static_cast<double>(WHISPER_SAMPLE_RATE) / static_cast<double>(IntSampleRate);
+					int32 OutNumFrames = static_cast<int32>(NumFrames * Ratio);
+					ResampledData.SetNum(OutNumFrames);
+
+					for (int32 i = 0; i < OutNumFrames; ++i)
+					{
+						double SrcIndex = static_cast<double>(i) / Ratio;
+						int32 Idx0 = static_cast<int32>(SrcIndex);
+						int32 Idx1 = FMath::Min(Idx0 + 1, NumFrames - 1);
+						double Frac = SrcIndex - static_cast<double>(Idx0);
+						ResampledData[i] = static_cast<float>(MonoData[Idx0] * (1.0 - Frac) + MonoData[Idx1] * Frac);
+					}
+				}
+			}
+			else
+			{
+				ResampledData = MoveTemp(AudioSnapshot);
+			}
+
+			// Keep only last 30 seconds
+			if (ResampledData.Num() > MaxWindowSamples)
+			{
+				int32 StartOffset = ResampledData.Num() - MaxWindowSamples;
+				TArray<float> Trimmed;
+				Trimmed.SetNum(MaxWindowSamples);
+				FMemory::Memcpy(Trimmed.GetData(), ResampledData.GetData() + StartOffset, MaxWindowSamples * sizeof(float));
+				ResampledData = MoveTemp(Trimmed);
+			}
+
+			// Normalize audio for whisper
+			{
+				float PeakAbs = 0.0f;
+				for (int32 i = 0; i < ResampledData.Num(); ++i)
+				{
+					float Abs = FMath::Abs(ResampledData[i]);
+					if (Abs > PeakAbs) PeakAbs = Abs;
+				}
+				if (PeakAbs > 0.0f && PeakAbs < 0.5f)
+				{
+					float Gain = 0.9f / PeakAbs;
+					for (int32 i = 0; i < ResampledData.Num(); ++i)
+					{
+						ResampledData[i] *= Gain;
+					}
+				}
+			}
+
+			// Run whisper
+			whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+			WParams.n_threads = FMath::Min(FPlatformMisc::NumberOfCoresIncludingHyperthreads(), 4);
+			WParams.print_progress = false;
+			WParams.print_special = false;
+			WParams.print_realtime = false;
+			WParams.print_timestamps = false;
+			WParams.single_segment = false;
+			WParams.no_timestamps = true;
+
+			std::string LanguageUtf8 = TCHAR_TO_UTF8(*Language);
+			WParams.language = LanguageUtf8.c_str();
+
+			// Use realtime flag as abort callback
+			WParams.abort_callback = [](void* UserData) -> bool
+			{
+				TAtomic<bool>* Flag = static_cast<TAtomic<bool>*>(UserData);
+				return !(*Flag); // Abort if no longer in realtime mode
+			};
+			WParams.abort_callback_user_data = RealtimeFlag;
+
+			int Ret = whisper_full(BgCtx, WParams, ResampledData.GetData(), ResampledData.Num());
+
+			if (Ret != 0 || !*RealtimeFlag)
+			{
+				continue;
+			}
+
+			// Extract full window text
+			FString WindowText;
+			int NSegments = whisper_full_n_segments(BgCtx);
+			for (int i = 0; i < NSegments; ++i)
+			{
+				const char* SegText = whisper_full_get_segment_text(BgCtx, i);
+				WindowText += UTF8_TO_TCHAR(SegText);
+			}
+
+			WindowText = WindowText.TrimStartAndEnd();
+
+			// Compute delta: find new text by checking if window text starts with or contains last window text
+			FString DeltaText;
+
+			if (UWhisperCppTranscription* Self = WeakThis.Get())
+			{
+				if (Self->LastWindowText.IsEmpty())
+				{
+					DeltaText = WindowText;
+				}
+				else if (WindowText.Len() > Self->LastWindowText.Len() && WindowText.StartsWith(Self->LastWindowText))
+				{
+					DeltaText = WindowText.Mid(Self->LastWindowText.Len()).TrimStartAndEnd();
+				}
+				else if (!WindowText.Equals(Self->LastWindowText))
+				{
+					// Window shifted significantly, treat all as new
+					DeltaText = WindowText;
+				}
+
+				Self->LastWindowText = WindowText;
+
+				if (!DeltaText.IsEmpty())
+				{
+					if (!Self->AccumulatedTranscription.IsEmpty())
+					{
+						Self->AccumulatedTranscription += TEXT(" ");
+					}
+					Self->AccumulatedTranscription += DeltaText;
+
+					// Broadcast on game thread
+					FString PartialText = DeltaText;
+					AsyncTask(ENamedThreads::GameThread, [WeakThis, PartialText]()
+					{
+						if (UWhisperCppTranscription* GameSelf = WeakThis.Get())
+						{
+							GameSelf->OnPartialTranscription.Broadcast(PartialText);
+						}
+					});
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
+	});
+}
+
+bool UWhisperCppTranscription::LoadWavFile(const FString& FilePath, TArray<float>& OutAudioData, int32& OutSampleRate, int32& OutNumChannels)
+{
+	TArray<uint8> FileData;
+	if (!FFileHelper::LoadFileToArray(FileData, *FilePath))
+	{
+		return false;
+	}
+
+	if (FileData.Num() < 44)
+	{
+		UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: WAV file too small"));
+		return false;
+	}
+
+	const uint8* Data = FileData.GetData();
+
+	// Verify RIFF header
+	if (Data[0] != 'R' || Data[1] != 'I' || Data[2] != 'F' || Data[3] != 'F')
+	{
+		UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: Not a valid RIFF file"));
+		return false;
+	}
+
+	// Verify WAVE format
+	if (Data[8] != 'W' || Data[9] != 'A' || Data[10] != 'V' || Data[11] != 'E')
+	{
+		UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: Not a valid WAVE file"));
+		return false;
+	}
+
+	// Parse fmt chunk — find it by scanning chunks
+	int32 Offset = 12;
+	int16 AudioFormat = 0;
+	int16 NumChannels = 0;
+	int32 SampleRate = 0;
+	int16 BitsPerSample = 0;
+
+	while (Offset + 8 <= FileData.Num())
+	{
+		const uint8* ChunkPtr = Data + Offset;
+		uint32 ChunkSize = *reinterpret_cast<const uint32*>(ChunkPtr + 4);
+
+		if (ChunkPtr[0] == 'f' && ChunkPtr[1] == 'm' && ChunkPtr[2] == 't' && ChunkPtr[3] == ' ')
+		{
+			if (Offset + 8 + 16 > FileData.Num())
+			{
+				return false;
+			}
+			AudioFormat = *reinterpret_cast<const int16*>(ChunkPtr + 8);
+			NumChannels = *reinterpret_cast<const int16*>(ChunkPtr + 10);
+			SampleRate = *reinterpret_cast<const int32*>(ChunkPtr + 12);
+			BitsPerSample = *reinterpret_cast<const int16*>(ChunkPtr + 22);
+		}
+		else if (ChunkPtr[0] == 'd' && ChunkPtr[1] == 'a' && ChunkPtr[2] == 't' && ChunkPtr[3] == 'a')
+		{
+			if (AudioFormat == 0)
+			{
+				UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: data chunk found before fmt chunk"));
+				return false;
+			}
+
+			const uint8* AudioDataPtr = ChunkPtr + 8;
+			int32 AudioDataSize = FMath::Min(static_cast<int32>(ChunkSize), FileData.Num() - (Offset + 8));
+
+			if (AudioFormat == 1 && BitsPerSample == 16) // PCM 16-bit
+			{
+				int32 NumSamples = AudioDataSize / 2;
+				OutAudioData.SetNum(NumSamples);
+				const int16* Samples16 = reinterpret_cast<const int16*>(AudioDataPtr);
+				for (int32 i = 0; i < NumSamples; ++i)
+				{
+					OutAudioData[i] = static_cast<float>(Samples16[i]) / 32768.0f;
+				}
+			}
+			else if (AudioFormat == 3 && BitsPerSample == 32) // IEEE float 32-bit
+			{
+				int32 NumSamples = AudioDataSize / 4;
+				OutAudioData.SetNum(NumSamples);
+				FMemory::Memcpy(OutAudioData.GetData(), AudioDataPtr, NumSamples * sizeof(float));
+			}
+			else
+			{
+				UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: Unsupported WAV format (format=%d, bits=%d)"), AudioFormat, BitsPerSample);
+				return false;
+			}
+
+			OutSampleRate = SampleRate;
+			OutNumChannels = NumChannels;
+			return true;
+		}
+
+		Offset += 8 + ChunkSize;
+		// Chunks are word-aligned
+		if (ChunkSize % 2 != 0)
+		{
+			Offset++;
+		}
+	}
+
+	UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: No data chunk found in WAV file"));
+	return false;
+}
+
+void UWhisperCppTranscription::ResampleTo16kMono(const TArray<float>& InData, int32 InSampleRate, int32 InNumChannels, TArray<float>& OutData)
+{
+	if (InData.Num() == 0 || InSampleRate <= 0 || InNumChannels <= 0)
+	{
+		return;
+	}
+
+	// First: downmix to mono if needed
+	TArray<float> MonoData;
+	int32 NumFrames = InData.Num() / InNumChannels;
+
+	if (InNumChannels > 1)
+	{
+		MonoData.SetNum(NumFrames);
+		for (int32 i = 0; i < NumFrames; ++i)
+		{
+			float Sum = 0.0f;
+			for (int32 c = 0; c < InNumChannels; ++c)
+			{
+				Sum += InData[i * InNumChannels + c];
+			}
+			MonoData[i] = Sum / static_cast<float>(InNumChannels);
+		}
+	}
+	else
+	{
+		MonoData = InData;
+	}
+
+	// Then: resample to 16kHz if needed
+	if (InSampleRate == WHISPER_SAMPLE_RATE)
+	{
+		OutData = MoveTemp(MonoData);
+		return;
+	}
+
+	double Ratio = static_cast<double>(WHISPER_SAMPLE_RATE) / static_cast<double>(InSampleRate);
+	int32 OutNumFrames = static_cast<int32>(NumFrames * Ratio);
+	OutData.SetNum(OutNumFrames);
+
+	for (int32 i = 0; i < OutNumFrames; ++i)
+	{
+		double SrcIndex = static_cast<double>(i) / Ratio;
+		int32 Idx0 = static_cast<int32>(SrcIndex);
+		int32 Idx1 = FMath::Min(Idx0 + 1, NumFrames - 1);
+		double Frac = SrcIndex - static_cast<double>(Idx0);
+
+		OutData[i] = static_cast<float>(MonoData[Idx0] * (1.0 - Frac) + MonoData[Idx1] * Frac);
+	}
+} 
