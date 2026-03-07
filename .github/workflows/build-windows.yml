@@ -3,12 +3,6 @@ name: Build llama.cpp (Windows x64)
 on:
   workflow_dispatch:
   workflow_call:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
 
 env:
   LLAMA_CPP_TAG: b8169
@@ -53,9 +47,3 @@ jobs:
         with:
           name: llama-cpp-windows-x64
           path: llama-cpp-windows-x64.zip
-
-      - name: Upload release asset
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: llama-cpp-windows-x64.zip

@@ -3,12 +3,6 @@ name: Download sherpa-onnx binaries
 on:
   workflow_dispatch:
   workflow_call:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
 
 env:
   SHERPA_VERSION: "1.12.28"
