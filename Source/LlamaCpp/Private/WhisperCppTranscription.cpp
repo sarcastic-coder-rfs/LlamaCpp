@@ -147,7 +147,13 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 		return;
 	}
 
-	CapturedAudioData.Empty();
+	{
+		FScopeLock Lock(&CapturedAudioLock);
+		CapturedAudioData.Empty();
+		CaptureSampleRate = 0.0f;
+		CaptureNumChannels = 0;
+	}
+	bHasReceivedAudio = false;
 
 	if (!AudioCapture)
 	{
@@ -170,12 +176,13 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 	Audio::FAudioCaptureDeviceParams Params;
 	Audio::FOnAudioCaptureFunction OnCapture = [this](const void* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
 	{
-		if (NumFrames <= 0 || InNumChannels <= 0)
+		if (!InAudio || NumFrames <= 0 || InNumChannels <= 0 || InSampleRate <= 0)
 		{
 			return;
 		}
 
 		const float* AudioData = static_cast<const float*>(InAudio);
+		bHasReceivedAudio = true;
 
 		CaptureSampleRate = static_cast<float>(InSampleRate);
 		CaptureNumChannels = InNumChannels;
@@ -195,7 +202,8 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 
 	if (!AudioCapture->StartStream())
 	{
-		UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: Failed to start audio capture stream"));
+		UE_LOG(LogWhisperCpp, Error, TEXT("Whisper: Failed to start audio capture stream (check microphone permission/device)"));
+		AudioCapture->CloseStream();
 		return;
 	}
 
@@ -217,8 +225,15 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 		AudioCapture->CloseStream();
 	}
 
+	TArray<float> CapturedSnapshot;
+	{
+		FScopeLock Lock(&CapturedAudioLock);
+		CapturedSnapshot = MoveTemp(CapturedAudioData);
+		CapturedAudioData.Reset();
+	}
+
 	bIsCapturing = false;
-	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Microphone capture stopped, %d samples captured"), CapturedAudioData.Num());
+	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Microphone capture stopped, %d samples captured"), CapturedSnapshot.Num());
 
 	if (!IsModelLoaded())
 	{
@@ -228,9 +243,16 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 		return;
 	}
 
-	if (CapturedAudioData.Num() == 0)
+	if (CapturedSnapshot.Num() == 0)
 	{
-		UE_LOG(LogWhisperCpp, Warning, TEXT("Whisper: No audio data captured"));
+		if (!bHasReceivedAudio)
+		{
+			UE_LOG(LogWhisperCpp, Warning, TEXT("Whisper: No audio callback data received (mic permission/device issue likely)"));
+		}
+		else
+		{
+			UE_LOG(LogWhisperCpp, Warning, TEXT("Whisper: No audio data captured"));
+		}
 		FWhisperTranscriptionResult EmptyResult;
 		OnTranscriptionComplete.Broadcast(EmptyResult);
 		return;
@@ -241,14 +263,12 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 	int32 SrcSampleRate = static_cast<int32>(CaptureSampleRate);
 	if (SrcSampleRate != WHISPER_SAMPLE_RATE || CaptureNumChannels != 1)
 	{
-		ResampleTo16kMono(CapturedAudioData, SrcSampleRate, CaptureNumChannels, ResampledData);
+		ResampleTo16kMono(CapturedSnapshot, SrcSampleRate, CaptureNumChannels, ResampledData);
 	}
 	else
 	{
-		ResampledData = MoveTemp(CapturedAudioData);
+		ResampledData = MoveTemp(CapturedSnapshot);
 	}
-
-	CapturedAudioData.Empty();
 
 	// Compute RMS audio level to verify we have real audio
 	float SumSquares = 0.0f;

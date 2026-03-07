@@ -98,6 +98,7 @@ private:
 	TAtomic<bool> bCancelTranscription{false};
 	TAtomic<bool> bIsTranscribing{false};
 	TAtomic<bool> bIsCapturing{false};
+	TAtomic<bool> bHasReceivedAudio{false};
 
 	TArray<float> CapturedAudioData;
 	FCriticalSection CapturedAudioLock;
