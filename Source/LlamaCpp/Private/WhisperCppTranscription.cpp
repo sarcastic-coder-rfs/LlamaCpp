@@ -15,6 +15,7 @@ UWhisperCppTranscription::UWhisperCppTranscription()
 
 void UWhisperCppTranscription::BeginDestroy()
 {
+	bIsBeingDestroyed = true;
 	StopTranscription();
 
 	if (bIsRealtimeTranscribing)
@@ -176,7 +177,7 @@ void UWhisperCppTranscription::StartMicrophoneCapture()
 	Audio::FAudioCaptureDeviceParams Params;
 	Audio::FOnAudioCaptureFunction OnCapture = [this](const void* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
 	{
-		if (!InAudio || NumFrames <= 0 || InNumChannels <= 0 || InSampleRate <= 0)
+		if (bIsBeingDestroyed || !InAudio || NumFrames <= 0 || InNumChannels <= 0 || InSampleRate <= 0)
 		{
 			return;
 		}
