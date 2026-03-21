@@ -1,5 +1,6 @@
 #include "SherpaOnnxTranscription.h"
 #include "Async/Async.h"
+#include "Misc/Paths.h"
 #include "LlamaCppLog.h"
 
 #if WITH_SHERPA_ONNX
@@ -58,6 +59,15 @@ void USherpaOnnxTranscription::SherpaOnnxLoadModel(const FString& EncoderPath, c
 		std::string JoinerUtf8 = TCHAR_TO_UTF8(*JoinerCopy);
 		std::string TokensUtf8 = TCHAR_TO_UTF8(*TokensCopy);
 
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Encoder: %s"), *EncoderCopy);
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Decoder: %s"), *DecoderCopy);
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Joiner: %s"), *JoinerCopy);
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Tokens: %s"), *TokensCopy);
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Encoder exists: %s"), FPaths::FileExists(EncoderCopy) ? TEXT("YES") : TEXT("NO"));
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Decoder exists: %s"), FPaths::FileExists(DecoderCopy) ? TEXT("YES") : TEXT("NO"));
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Joiner exists: %s"), FPaths::FileExists(JoinerCopy) ? TEXT("YES") : TEXT("NO"));
+		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Tokens exists: %s"), FPaths::FileExists(TokensCopy) ? TEXT("YES") : TEXT("NO"));
+
 		// All const char* fields must be valid pointers (empty string, not null)
 		Config.model_config.transducer.encoder = EncoderUtf8.c_str();
 		Config.model_config.transducer.decoder = DecoderUtf8.c_str();
@@ -70,7 +80,7 @@ void USherpaOnnxTranscription::SherpaOnnxLoadModel(const FString& EncoderPath, c
 		Config.model_config.tokens = TokensUtf8.c_str();
 		Config.model_config.num_threads = NumThreads;
 		Config.model_config.provider = "cpu";
-		Config.model_config.debug = 0;
+		Config.model_config.debug = 1;
 		Config.model_config.model_type = "";
 		Config.model_config.modeling_unit = "";
 		Config.model_config.bpe_vocab = "";
