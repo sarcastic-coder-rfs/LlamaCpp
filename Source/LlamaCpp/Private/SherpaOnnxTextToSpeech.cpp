@@ -3,6 +3,8 @@
 
 #include "LlamaCppLog.h"
 
+#if WITH_SHERPA_ONNX
+
 #include <string>
 #include "Sound/SoundWaveProcedural.h"
 #include "Components/AudioComponent.h"
@@ -277,3 +279,25 @@ void USherpaOnnxTextToSpeech::CleanupAudio()
 
 	SoundWave = nullptr;
 }
+
+#else // !WITH_SHERPA_ONNX
+
+USherpaOnnxTextToSpeech::USherpaOnnxTextToSpeech() {}
+void USherpaOnnxTextToSpeech::BeginDestroy() { Super::BeginDestroy(); }
+void USherpaOnnxTextToSpeech::LoadModel(const FString&, const FString&, const FString&)
+{
+	UE_LOG(LogSherpaOnnxTTS, Error, TEXT("SherpaOnnxTTS: Not available — plugin was built without sherpa-onnx libraries"));
+	OnModelLoaded.Broadcast(false);
+}
+void USherpaOnnxTextToSpeech::UnloadModel() {}
+bool USherpaOnnxTextToSpeech::IsModelLoaded() const { return false; }
+void USherpaOnnxTextToSpeech::Speak(const FString&, int32, float)
+{
+	OnSpeakError.Broadcast(TEXT("SherpaOnnx TTS not available"));
+}
+void USherpaOnnxTextToSpeech::Stop() {}
+bool USherpaOnnxTextToSpeech::IsSpeaking() const { return false; }
+void USherpaOnnxTextToSpeech::MonitorPlayback() {}
+void USherpaOnnxTextToSpeech::CleanupAudio() {}
+
+#endif // WITH_SHERPA_ONNX
