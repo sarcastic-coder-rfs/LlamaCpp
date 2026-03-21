@@ -51,9 +51,6 @@ void USherpaOnnxTranscription::SherpaOnnxLoadModel(const FString& EncoderPath, c
 
 	Async(EAsyncExecution::Thread, [WeakThis, EncoderCopy, DecoderCopy, JoinerCopy, TokensCopy, NumThreads]()
 	{
-		SherpaOnnxOnlineRecognizerConfig Config;
-		memset(&Config, 0, sizeof(Config));
-
 		std::string EncoderUtf8 = TCHAR_TO_UTF8(*EncoderCopy);
 		std::string DecoderUtf8 = TCHAR_TO_UTF8(*DecoderCopy);
 		std::string JoinerUtf8 = TCHAR_TO_UTF8(*JoinerCopy);
@@ -68,48 +65,26 @@ void USherpaOnnxTranscription::SherpaOnnxLoadModel(const FString& EncoderPath, c
 		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Joiner exists: %s"), FPaths::FileExists(JoinerCopy) ? TEXT("YES") : TEXT("NO"));
 		UE_LOG(LogSherpaOnnxASR, Log, TEXT("SherpaOnnxASR: Tokens exists: %s"), FPaths::FileExists(TokensCopy) ? TEXT("YES") : TEXT("NO"));
 
-		// All const char* fields must be valid pointers (empty string, not null)
-		Config.model_config.transducer.encoder = EncoderUtf8.c_str();
-		Config.model_config.transducer.decoder = DecoderUtf8.c_str();
-		Config.model_config.transducer.joiner = JoinerUtf8.c_str();
-		Config.model_config.paraformer.encoder = "";
-		Config.model_config.paraformer.decoder = "";
-		Config.model_config.zipformer2_ctc.model = "";
-		Config.model_config.nemo_ctc.model = "";
-		Config.model_config.t_one_ctc.model = "";
-		Config.model_config.tokens = TokensUtf8.c_str();
-		Config.model_config.num_threads = NumThreads;
-		Config.model_config.provider = "cpu";
-		Config.model_config.debug = 1;
-		Config.model_config.model_type = "";
-		Config.model_config.modeling_unit = "";
-		Config.model_config.bpe_vocab = "";
-		Config.model_config.tokens_buf = "";
-		Config.model_config.tokens_buf_size = 0;
+		// Initialize sub-structs separately with memset, then assign to parent
+		// (matches the pattern from sherpa-onnx C API examples)
+		SherpaOnnxOnlineTransducerModelConfig TransducerConfig;
+		memset(&TransducerConfig, 0, sizeof(TransducerConfig));
+		TransducerConfig.encoder = EncoderUtf8.c_str();
+		TransducerConfig.decoder = DecoderUtf8.c_str();
+		TransducerConfig.joiner = JoinerUtf8.c_str();
 
-		Config.feat_config.sample_rate = 16000;
-		Config.feat_config.feature_dim = 80;
+		SherpaOnnxOnlineModelConfig ModelConfig;
+		memset(&ModelConfig, 0, sizeof(ModelConfig));
+		ModelConfig.transducer = TransducerConfig;
+		ModelConfig.tokens = TokensUtf8.c_str();
+		ModelConfig.num_threads = NumThreads;
+		ModelConfig.provider = "cpu";
+		ModelConfig.debug = 1;
 
+		SherpaOnnxOnlineRecognizerConfig Config;
+		memset(&Config, 0, sizeof(Config));
+		Config.model_config = ModelConfig;
 		Config.decoding_method = "greedy_search";
-		Config.max_active_paths = 4;
-
-		Config.enable_endpoint = 1;
-		Config.rule1_min_trailing_silence = 2.4f;
-		Config.rule2_min_trailing_silence = 1.2f;
-		Config.rule3_min_utterance_length = 20.0f;
-
-		Config.hotwords_file = "";
-		Config.hotwords_score = 0.0f;
-		Config.ctc_fst_decoder_config.graph = "";
-		Config.ctc_fst_decoder_config.max_active = 0;
-		Config.rule_fsts = "";
-		Config.rule_fars = "";
-		Config.blank_penalty = 0.0f;
-		Config.hotwords_buf = "";
-		Config.hotwords_buf_size = 0;
-		Config.hr.dict_dir = "";
-		Config.hr.lexicon = "";
-		Config.hr.rule_fsts = "";
 
 		const SherpaOnnxOnlineRecognizer* LoadedRecognizer = SherpaOnnxCreateOnlineRecognizer(&Config);
 		bool bSuccess = (LoadedRecognizer != nullptr);
