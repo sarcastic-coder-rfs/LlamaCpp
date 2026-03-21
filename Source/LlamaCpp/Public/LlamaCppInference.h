@@ -70,4 +70,6 @@ private:
 
 	TAtomic<bool> bCancelGeneration{false};
 	TAtomic<bool> bIsGenerating{false};
+
+	FEvent* GenerationDoneEvent = nullptr;
 };
