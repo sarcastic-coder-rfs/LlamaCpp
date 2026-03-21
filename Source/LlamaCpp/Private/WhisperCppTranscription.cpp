@@ -152,7 +152,7 @@ void UWhisperCppTranscription::TranscribeWavFileAsync(const FString& WavFilePath
 		ResampledData = MoveTemp(AudioData);
 	}
 
-	RunTranscription(MoveTemp(ResampledData), Language);
+	RunTranscription(MoveTemp(ResampledData), Language, MaxThreads);
 }
 
 void UWhisperCppTranscription::StartMicrophoneCapture()
@@ -317,7 +317,7 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 		UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Normalized audio (gain=%.1fx, new peak=%.2f)"), Gain, MaxAbs * Gain);
 	}
 
-	RunTranscription(MoveTemp(ResampledData), Language);
+	RunTranscription(MoveTemp(ResampledData), Language, MaxThreads);
 }
 
 bool UWhisperCppTranscription::IsCapturing() const
@@ -330,7 +330,7 @@ void UWhisperCppTranscription::StopTranscription()
 	bCancelTranscription = true;
 }
 
-void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const FString& Language)
+void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const FString& Language, int32 NumThreads)
 {
 	bCancelTranscription = false;
 	bIsTranscribing = true;
@@ -358,7 +358,7 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Starting transcription with %d samples (%.1fs)"),
 		AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
 
-	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag, DoneEvent]()
+	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag, DoneEvent, NumThreads]()
 	{
 		FWhisperTranscriptionResult Result;
 
@@ -375,11 +375,7 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 #endif
 
 		whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-		WParams.n_threads = FPlatformMisc::NumberOfCoresIncludingHyperthreads();
-		if (WParams.n_threads > 4)
-		{
-			WParams.n_threads = 4;
-		}
+		WParams.n_threads = FMath::Clamp(NumThreads, 1, FPlatformMisc::NumberOfCoresIncludingHyperthreads());
 #if !UE_BUILD_SHIPPING
 		WParams.print_progress = true;
 		WParams.print_realtime = true;
@@ -528,8 +524,9 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* RealtimeFlag = &bIsRealtimeTranscribing;
 	FEvent* DoneEvent = RealtimeDoneEvent;
+	int32 NumThreads = MaxThreads;
 
-	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag, DoneEvent]()
+	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag, DoneEvent, NumThreads]()
 	{
 		const int32 MaxWindowSamples = 30 * WHISPER_SAMPLE_RATE; // 30 seconds at 16kHz = 480000
 
@@ -658,7 +655,7 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 
 			// Run whisper
 			whisper_full_params WParams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-			WParams.n_threads = FMath::Min(FPlatformMisc::NumberOfCoresIncludingHyperthreads(), 4);
+			WParams.n_threads = FMath::Clamp(NumThreads, 1, FPlatformMisc::NumberOfCoresIncludingHyperthreads());
 			WParams.print_progress = false;
 			WParams.print_special = false;
 			WParams.print_realtime = false;

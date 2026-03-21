@@ -83,6 +83,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Whisper")
 	bool IsRealtimeTranscribing() const;
 
+	/** Maximum number of threads whisper uses for transcription. Default 4 (good for mobile). Increase on PC for faster results. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Whisper")
+	int32 MaxThreads = 4;
+
 	UPROPERTY(BlueprintAssignable, Category = "Whisper")
 	FOnWhisperModelLoaded OnModelLoaded;
 
@@ -107,7 +111,7 @@ private:
 
 	class Audio::FAudioCapture* AudioCapture = nullptr;
 
-	void RunTranscription(TArray<float> AudioData, const FString& Language);
+	void RunTranscription(TArray<float> AudioData, const FString& Language, int32 NumThreads);
 	bool LoadWavFile(const FString& FilePath, TArray<float>& OutAudioData, int32& OutSampleRate, int32& OutNumChannels);
 	void ResampleTo16kMono(const TArray<float>& InData, int32 InSampleRate, int32 InNumChannels, TArray<float>& OutData);
 
