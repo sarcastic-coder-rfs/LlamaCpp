@@ -695,47 +695,45 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 
 			WindowText = WindowText.TrimStartAndEnd();
 
-			// Compute delta: find new text by checking if window text starts with or contains last window text
-			FString DeltaText;
-
-			if (UWhisperCppTranscription* Self = WeakThis.Get())
+			// Update AccumulatedTranscription and broadcast on game thread
+			// to avoid data race with StopRealtimeTranscription
+			if (!WindowText.IsEmpty())
 			{
-				if (Self->LastWindowText.IsEmpty())
+				FString NewWindowText = WindowText;
+				AsyncTask(ENamedThreads::GameThread, [WeakThis, NewWindowText]()
 				{
-					DeltaText = WindowText;
-				}
-				else if (WindowText.Len() > Self->LastWindowText.Len() && WindowText.StartsWith(Self->LastWindowText))
-				{
-					DeltaText = WindowText.Mid(Self->LastWindowText.Len()).TrimStartAndEnd();
-				}
-				else if (!WindowText.Equals(Self->LastWindowText))
-				{
-					// Window shifted significantly, treat all as new
-					DeltaText = WindowText;
-				}
-
-				Self->LastWindowText = WindowText;
-
-				if (!DeltaText.IsEmpty())
-				{
-					if (!Self->AccumulatedTranscription.IsEmpty())
+					if (UWhisperCppTranscription* Self = WeakThis.Get())
 					{
-						Self->AccumulatedTranscription += TEXT(" ");
-					}
-					Self->AccumulatedTranscription += DeltaText;
+						FString DeltaText;
 
-					// Broadcast on game thread
-					FString PartialText = DeltaText;
-					AsyncTask(ENamedThreads::GameThread, [WeakThis, PartialText]()
-					{
-						if (UWhisperCppTranscription* GameSelf = WeakThis.Get())
+						if (Self->LastWindowText.IsEmpty())
 						{
-							GameSelf->OnPartialTranscription.Broadcast(PartialText);
+							DeltaText = NewWindowText;
 						}
-					});
-				}
+						else if (NewWindowText.Len() > Self->LastWindowText.Len() && NewWindowText.StartsWith(Self->LastWindowText))
+						{
+							DeltaText = NewWindowText.Mid(Self->LastWindowText.Len()).TrimStartAndEnd();
+						}
+						else if (!NewWindowText.Equals(Self->LastWindowText))
+						{
+							DeltaText = NewWindowText;
+						}
+
+						Self->LastWindowText = NewWindowText;
+
+						if (!DeltaText.IsEmpty())
+						{
+							if (!Self->AccumulatedTranscription.IsEmpty())
+							{
+								Self->AccumulatedTranscription += TEXT(" ");
+							}
+							Self->AccumulatedTranscription += DeltaText;
+							Self->OnPartialTranscription.Broadcast(DeltaText);
+						}
+					}
+				});
 			}
-			else
+			else if (!WeakThis.IsValid())
 			{
 				break;
 			}
