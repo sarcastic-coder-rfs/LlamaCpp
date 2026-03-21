@@ -114,6 +114,7 @@ private:
 	void RealtimeTranscriptionLoop(FString Language, float IntervalSeconds);
 
 	TAtomic<bool> bIsRealtimeTranscribing{false};
+	TAtomic<bool> bIsBeingDestroyed{false};
 	FString AccumulatedTranscription;
 	FString LastWindowText;
 
