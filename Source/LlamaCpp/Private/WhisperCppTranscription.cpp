@@ -152,7 +152,7 @@ void UWhisperCppTranscription::TranscribeWavFileAsync(const FString& WavFilePath
 		ResampledData = MoveTemp(AudioData);
 	}
 
-	RunTranscription(MoveTemp(ResampledData), Language, MaxThreads);
+	RunTranscription(MoveTemp(ResampledData), Language, MaxThreads, bSingleSegment);
 }
 
 void UWhisperCppTranscription::StartMicrophoneCapture()
@@ -317,7 +317,7 @@ void UWhisperCppTranscription::StopMicrophoneCaptureAndTranscribe(const FString&
 		UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Normalized audio (gain=%.1fx, new peak=%.2f)"), Gain, MaxAbs * Gain);
 	}
 
-	RunTranscription(MoveTemp(ResampledData), Language, MaxThreads);
+	RunTranscription(MoveTemp(ResampledData), Language, MaxThreads, bSingleSegment);
 }
 
 bool UWhisperCppTranscription::IsCapturing() const
@@ -330,7 +330,7 @@ void UWhisperCppTranscription::StopTranscription()
 	bCancelTranscription = true;
 }
 
-void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const FString& Language, int32 NumThreads)
+void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const FString& Language, int32 NumThreads, bool bUseSingleSegment)
 {
 	bCancelTranscription = false;
 	bIsTranscribing = true;
@@ -358,7 +358,7 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Starting transcription with %d samples (%.1fs)"),
 		AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
 
-	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag, DoneEvent, NumThreads]()
+	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag, DoneEvent, NumThreads, bUseSingleSegment]()
 	{
 		FWhisperTranscriptionResult Result;
 
@@ -386,7 +386,7 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		WParams.print_timestamps = false;
 #endif
 		WParams.print_special = false;
-		WParams.single_segment = false;
+		WParams.single_segment = bUseSingleSegment;
 		WParams.no_timestamps = false;
 
 		std::string LanguageUtf8 = TCHAR_TO_UTF8(*Language);
@@ -525,8 +525,9 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 	TAtomic<bool>* RealtimeFlag = &bIsRealtimeTranscribing;
 	FEvent* DoneEvent = RealtimeDoneEvent;
 	int32 NumThreads = MaxThreads;
+	bool bUseSingleSegment = bSingleSegment;
 
-	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag, DoneEvent, NumThreads]()
+	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag, DoneEvent, NumThreads, bUseSingleSegment]()
 	{
 		const int32 MaxWindowSamples = 30 * WHISPER_SAMPLE_RATE; // 30 seconds at 16kHz = 480000
 
@@ -660,7 +661,7 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 			WParams.print_special = false;
 			WParams.print_realtime = false;
 			WParams.print_timestamps = false;
-			WParams.single_segment = false;
+			WParams.single_segment = bUseSingleSegment;
 			WParams.no_timestamps = true;
 
 			std::string LanguageUtf8 = TCHAR_TO_UTF8(*Language);

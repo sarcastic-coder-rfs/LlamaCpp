@@ -87,6 +87,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Whisper")
 	int32 MaxThreads = 4;
 
+	/** Force whisper to output a single segment. Faster for realtime use since it skips segmentation. Default false. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Whisper")
+	bool bSingleSegment = false;
+
 	UPROPERTY(BlueprintAssignable, Category = "Whisper")
 	FOnWhisperModelLoaded OnModelLoaded;
 
@@ -111,7 +115,7 @@ private:
 
 	class Audio::FAudioCapture* AudioCapture = nullptr;
 
-	void RunTranscription(TArray<float> AudioData, const FString& Language, int32 NumThreads);
+	void RunTranscription(TArray<float> AudioData, const FString& Language, int32 NumThreads, bool bUseSingleSegment);
 	bool LoadWavFile(const FString& FilePath, TArray<float>& OutAudioData, int32& OutSampleRate, int32& OutNumChannels);
 	void ResampleTo16kMono(const TArray<float>& InData, int32 InSampleRate, int32 InNumChannels, TArray<float>& OutData);
 
