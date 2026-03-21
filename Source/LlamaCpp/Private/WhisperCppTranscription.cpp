@@ -11,18 +11,27 @@
 
 UWhisperCppTranscription::UWhisperCppTranscription()
 {
+	TranscriptionDoneEvent = FPlatformProcess::GetSynchEventFromPool(false);
+	RealtimeDoneEvent = FPlatformProcess::GetSynchEventFromPool(false);
 }
 
 void UWhisperCppTranscription::BeginDestroy()
 {
 	bIsBeingDestroyed = true;
 	StopTranscription();
+	if (bIsTranscribing)
+	{
+		TranscriptionDoneEvent->Wait();
+	}
 
+	// Stop realtime transcription loop and wait for thread exit
 	if (bIsRealtimeTranscribing)
 	{
 		bIsRealtimeTranscribing = false;
+		RealtimeDoneEvent->Wait();
 	}
 
+	// Clean up audio capture
 	if (bIsCapturing)
 	{
 		if (AudioCapture)
@@ -36,6 +45,12 @@ void UWhisperCppTranscription::BeginDestroy()
 	}
 
 	UnloadModel();
+
+	FPlatformProcess::ReturnSynchEventToPool(TranscriptionDoneEvent);
+	TranscriptionDoneEvent = nullptr;
+	FPlatformProcess::ReturnSynchEventToPool(RealtimeDoneEvent);
+	RealtimeDoneEvent = nullptr;
+
 	Super::BeginDestroy();
 }
 
@@ -338,11 +353,12 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* CancelFlag = &bCancelTranscription;
 	TAtomic<bool>* TranscribingFlag = &bIsTranscribing;
+	FEvent* DoneEvent = TranscriptionDoneEvent;
 
 	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Starting transcription with %d samples (%.1fs)"),
 		AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
 
-	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag]()
+	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag, DoneEvent]()
 	{
 		FWhisperTranscriptionResult Result;
 
@@ -424,6 +440,7 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		}
 
 		*TranscribingFlag = false;
+		DoneEvent->Trigger();
 
 		AsyncTask(ENamedThreads::GameThread, [WeakThis, Result]()
 		{
@@ -510,8 +527,9 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 	TWeakObjectPtr<UWhisperCppTranscription> WeakThis(this);
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* RealtimeFlag = &bIsRealtimeTranscribing;
+	FEvent* DoneEvent = RealtimeDoneEvent;
 
-	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag]()
+	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag, DoneEvent]()
 	{
 		const int32 MaxWindowSamples = 30 * WHISPER_SAMPLE_RATE; // 30 seconds at 16kHz = 480000
 
@@ -677,51 +695,51 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 
 			WindowText = WindowText.TrimStartAndEnd();
 
-			// Compute delta: find new text by checking if window text starts with or contains last window text
-			FString DeltaText;
-
-			if (UWhisperCppTranscription* Self = WeakThis.Get())
+			// Update AccumulatedTranscription and broadcast on game thread
+			// to avoid data race with StopRealtimeTranscription
+			if (!WindowText.IsEmpty())
 			{
-				if (Self->LastWindowText.IsEmpty())
+				FString NewWindowText = WindowText;
+				AsyncTask(ENamedThreads::GameThread, [WeakThis, NewWindowText]()
 				{
-					DeltaText = WindowText;
-				}
-				else if (WindowText.Len() > Self->LastWindowText.Len() && WindowText.StartsWith(Self->LastWindowText))
-				{
-					DeltaText = WindowText.Mid(Self->LastWindowText.Len()).TrimStartAndEnd();
-				}
-				else if (!WindowText.Equals(Self->LastWindowText))
-				{
-					// Window shifted significantly, treat all as new
-					DeltaText = WindowText;
-				}
-
-				Self->LastWindowText = WindowText;
-
-				if (!DeltaText.IsEmpty())
-				{
-					if (!Self->AccumulatedTranscription.IsEmpty())
+					if (UWhisperCppTranscription* Self = WeakThis.Get())
 					{
-						Self->AccumulatedTranscription += TEXT(" ");
-					}
-					Self->AccumulatedTranscription += DeltaText;
+						FString DeltaText;
 
-					// Broadcast on game thread
-					FString PartialText = DeltaText;
-					AsyncTask(ENamedThreads::GameThread, [WeakThis, PartialText]()
-					{
-						if (UWhisperCppTranscription* GameSelf = WeakThis.Get())
+						if (Self->LastWindowText.IsEmpty())
 						{
-							GameSelf->OnPartialTranscription.Broadcast(PartialText);
+							DeltaText = NewWindowText;
 						}
-					});
-				}
+						else if (NewWindowText.Len() > Self->LastWindowText.Len() && NewWindowText.StartsWith(Self->LastWindowText))
+						{
+							DeltaText = NewWindowText.Mid(Self->LastWindowText.Len()).TrimStartAndEnd();
+						}
+						else if (!NewWindowText.Equals(Self->LastWindowText))
+						{
+							DeltaText = NewWindowText;
+						}
+
+						Self->LastWindowText = NewWindowText;
+
+						if (!DeltaText.IsEmpty())
+						{
+							if (!Self->AccumulatedTranscription.IsEmpty())
+							{
+								Self->AccumulatedTranscription += TEXT(" ");
+							}
+							Self->AccumulatedTranscription += DeltaText;
+							Self->OnPartialTranscription.Broadcast(DeltaText);
+						}
+					}
+				});
 			}
-			else
+			else if (!WeakThis.IsValid())
 			{
 				break;
 			}
 		}
+
+		DoneEvent->Trigger();
 	});
 }
 

@@ -117,4 +117,7 @@ private:
 	TAtomic<bool> bIsBeingDestroyed{false};
 	FString AccumulatedTranscription;
 	FString LastWindowText;
+
+	FEvent* TranscriptionDoneEvent = nullptr;
+	FEvent* RealtimeDoneEvent = nullptr;
 };

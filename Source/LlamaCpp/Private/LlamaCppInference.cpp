@@ -6,12 +6,23 @@
 
 ULlamaCppInference::ULlamaCppInference()
 {
+	GenerationDoneEvent = FPlatformProcess::GetSynchEventFromPool(false);
 }
 
 void ULlamaCppInference::BeginDestroy()
 {
 	StopGeneration();
+
+	if (bIsGenerating)
+	{
+		GenerationDoneEvent->Wait();
+	}
+
 	UnloadModel();
+
+	FPlatformProcess::ReturnSynchEventToPool(GenerationDoneEvent);
+	GenerationDoneEvent = nullptr;
+
 	Super::BeginDestroy();
 }
 
@@ -135,9 +146,10 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 	const llama_vocab* BgVocab = Vocab;
 	TAtomic<bool>* CancelFlag = &bCancelGeneration;
 	TAtomic<bool>* GeneratingFlag = &bIsGenerating;
+	FEvent* DoneEvent = GenerationDoneEvent;
 
 	Async(EAsyncExecution::Thread, [WeakThis, PromptCopy, MaxTokens, SamplingParams,
-							BgCtx, BgVocab, CancelFlag, GeneratingFlag]()
+							BgCtx, BgVocab, CancelFlag, GeneratingFlag, DoneEvent]()
 	{
 		FString FullResult;
 
@@ -153,6 +165,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 		{
 			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to tokenize prompt"));
 			*GeneratingFlag = false;
+			DoneEvent->Trigger();
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
 			{
 				if (auto* Self = WeakThis.Get())
@@ -189,6 +202,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 			UE_LOG(LogLlamaCpp, Error, TEXT("LlamaCpp: Failed to decode prompt"));
 			llama_sampler_free(Sampler);
 			*GeneratingFlag = false;
+			DoneEvent->Trigger();
 			AsyncTask(ENamedThreads::GameThread, [WeakThis]()
 			{
 				if (auto* Self = WeakThis.Get())
@@ -241,6 +255,7 @@ void ULlamaCppInference::GenerateTextAsync(const FString& Prompt, int32 MaxToken
 
 		llama_sampler_free(Sampler);
 		*GeneratingFlag = false;
+		DoneEvent->Trigger();
 
 		// Broadcast final result
 		AsyncTask(ENamedThreads::GameThread, [WeakThis, FullResult]()
