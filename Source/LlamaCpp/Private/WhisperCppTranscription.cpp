@@ -11,17 +11,27 @@
 
 UWhisperCppTranscription::UWhisperCppTranscription()
 {
+	TranscriptionDoneEvent = FPlatformProcess::GetSynchEventFromPool(false);
+	RealtimeDoneEvent = FPlatformProcess::GetSynchEventFromPool(false);
 }
 
 void UWhisperCppTranscription::BeginDestroy()
 {
+	// Cancel any in-progress transcription and wait for it
 	StopTranscription();
+	if (bIsTranscribing)
+	{
+		TranscriptionDoneEvent->Wait();
+	}
 
+	// Stop realtime transcription loop and wait for thread exit
 	if (bIsRealtimeTranscribing)
 	{
 		bIsRealtimeTranscribing = false;
+		RealtimeDoneEvent->Wait();
 	}
 
+	// Clean up audio capture
 	if (bIsCapturing)
 	{
 		if (AudioCapture)
@@ -35,6 +45,12 @@ void UWhisperCppTranscription::BeginDestroy()
 	}
 
 	UnloadModel();
+
+	FPlatformProcess::ReturnSynchEventToPool(TranscriptionDoneEvent);
+	TranscriptionDoneEvent = nullptr;
+	FPlatformProcess::ReturnSynchEventToPool(RealtimeDoneEvent);
+	RealtimeDoneEvent = nullptr;
+
 	Super::BeginDestroy();
 }
 
@@ -337,11 +353,12 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* CancelFlag = &bCancelTranscription;
 	TAtomic<bool>* TranscribingFlag = &bIsTranscribing;
+	FEvent* DoneEvent = TranscriptionDoneEvent;
 
 	UE_LOG(LogWhisperCpp, Log, TEXT("Whisper: Starting transcription with %d samples (%.1fs)"),
 		AudioData.Num(), static_cast<float>(AudioData.Num()) / WHISPER_SAMPLE_RATE);
 
-	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag]()
+	Async(EAsyncExecution::Thread, [WeakThis, AudioData = MoveTemp(AudioData), Language, BgCtx, CancelFlag, TranscribingFlag, DoneEvent]()
 	{
 		FWhisperTranscriptionResult Result;
 
@@ -423,6 +440,7 @@ void UWhisperCppTranscription::RunTranscription(TArray<float> AudioData, const F
 		}
 
 		*TranscribingFlag = false;
+		DoneEvent->Trigger();
 
 		AsyncTask(ENamedThreads::GameThread, [WeakThis, Result]()
 		{
@@ -509,8 +527,9 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 	TWeakObjectPtr<UWhisperCppTranscription> WeakThis(this);
 	whisper_context* BgCtx = WhisperCtx;
 	TAtomic<bool>* RealtimeFlag = &bIsRealtimeTranscribing;
+	FEvent* DoneEvent = RealtimeDoneEvent;
 
-	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag]()
+	Async(EAsyncExecution::Thread, [WeakThis, Language, IntervalSeconds, BgCtx, RealtimeFlag, DoneEvent]()
 	{
 		const int32 MaxWindowSamples = 30 * WHISPER_SAMPLE_RATE; // 30 seconds at 16kHz = 480000
 
@@ -721,6 +740,8 @@ void UWhisperCppTranscription::RealtimeTranscriptionLoop(FString Language, float
 				break;
 			}
 		}
+
+		DoneEvent->Trigger();
 	});
 }
 
